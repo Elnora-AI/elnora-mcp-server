@@ -1,0 +1,40 @@
+name: Deploy to Production
+
+on:
+  workflow_dispatch:
+
+env:
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+  AWS_ECR_REGISTRY: ${{ secrets.AWS_ECR_REGISTRY }}
+  AWS_CLUSTER: ${{ secrets.AWS_CLUSTER }}
+
+jobs:
+  deploy:
+    name: Deploy MCP Server
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: aws-actions/configure-aws-credentials@v5
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      - uses: aws-actions/amazon-ecr-login@v2
+      - name: Build and push Docker image
+        run: |
+          docker build -t ${{ env.AWS_ECR_REGISTRY }}/elnora-mcp-server:latest .
+          docker push ${{ env.AWS_ECR_REGISTRY }}/elnora-mcp-server:latest
+      - name: Update ECS service
+        run: |
+          export AWS_PAGER=""
+          aws ecs update-service \
+            --cluster ${{ env.AWS_CLUSTER }} \
+            --service mcp-server \
+            --force-new-deployment \
+            --region ${{ env.AWS_REGION }}
+      - name: Wait for stabilization
+        run: |
+          aws ecs wait services-stable \
+            --cluster ${{ env.AWS_CLUSTER }} \
+            --services mcp-server \
+            --region ${{ env.AWS_REGION }}

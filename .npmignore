@@ -1,0 +1,16 @@
+# Source and tests
+src/
+tests/
+
+# GitHub
+.github/
+
+# Config files
+tsconfig.json
+vitest.config.ts
+
+# MCP Registry
+server.json
+
+# CODEOWNERS
+CODEOWNERS

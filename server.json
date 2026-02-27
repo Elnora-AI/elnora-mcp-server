@@ -1,0 +1,17 @@
+{
+  "$schema": "https://registry.modelcontextprotocol.io/schema/server.json",
+  "name": "io.github.Elnora-AI/elnora-mcp-server",
+  "title": "Elnora MCP Server",
+  "description": "AI-powered bioprotocol optimization — generate, search, and manage lab protocols via MCP",
+  "version": "0.1.0",
+  "repository": {
+    "url": "https://github.com/Elnora-AI/elnora-mcp-server",
+    "source": "https://github.com/Elnora-AI/elnora-mcp-server"
+  },
+  "remotes": [
+    {
+      "transport_type": "streamable-http",
+      "url": "https://mcp.elnora.ai/mcp"
+    }
+  ]
+}
