@@ -20,7 +20,7 @@
   ],
   "remotes": [
     {
-      "transport_type": "streamable-http",
+      "type": "streamable-http",
       "url": "https://mcp.elnora.ai/mcp"
     }
   ]
