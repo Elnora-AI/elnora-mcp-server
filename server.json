@@ -3,7 +3,7 @@
   "name": "io.github.Elnora-AI/elnora-mcp-server",
   "title": "Elnora MCP Server",
   "description": "AI-powered bioprotocol optimization — generate, search, and manage lab protocols via MCP",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "repository": {
     "url": "https://github.com/Elnora-AI/elnora-mcp-server",
     "source": "github"
@@ -12,7 +12,7 @@
     {
       "registryType": "npm",
       "identifier": "@elnora-ai/mcp-server",
-      "version": "0.1.1",
+      "version": "0.2.0",
       "transport": {
         "type": "stdio"
       }
@@ -21,7 +21,11 @@
   "remotes": [
     {
       "type": "streamable-http",
-      "url": "https://mcp.elnora.ai/mcp"
+      "url": "https://mcp.elnora.ai/mcp",
+      "authorization": {
+        "type": "oauth2.1",
+        "authorizationUrl": "https://mcp.elnora.ai/.well-known/oauth-authorization-server"
+      }
     }
   ]
 }
