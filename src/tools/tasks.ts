@@ -1,9 +1,15 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { ElnoraApiClient } from "../services/elnora-api-client.js";
+import { RequestContext } from "../server.js";
 import { handleApiError } from "../services/error-handler.js";
+import { withGuard } from "./with-guard.js";
 
-export function registerTaskTools(server: McpServer, getClient: () => ElnoraApiClient): void {
+export function registerTaskTools(
+  server: McpServer,
+  getClient: () => ElnoraApiClient,
+  getContext: () => RequestContext,
+): void {
   server.registerTool(
     "elnora_create_task",
     {
@@ -20,7 +26,7 @@ export function registerTaskTools(server: McpServer, getClient: () => ElnoraApiC
         openWorldHint: true,
       },
     },
-    async ({ title }) => {
+    withGuard("elnora_create_task", getContext, async ({ title }) => {
       try {
         const task = await getClient().createTask(title);
         return {
@@ -29,7 +35,7 @@ export function registerTaskTools(server: McpServer, getClient: () => ElnoraApiC
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
       }
-    },
+    }),
   );
 
   server.registerTool(
@@ -45,7 +51,7 @@ export function registerTaskTools(server: McpServer, getClient: () => ElnoraApiC
       },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
-    async ({ status, limit, offset }) => {
+    withGuard("elnora_list_tasks", getContext, async ({ status, limit, offset }) => {
       try {
         const result = await getClient().listTasks(status, limit, offset);
         return {
@@ -54,7 +60,7 @@ export function registerTaskTools(server: McpServer, getClient: () => ElnoraApiC
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
       }
-    },
+    }),
   );
 
   server.registerTool(
@@ -70,7 +76,7 @@ export function registerTaskTools(server: McpServer, getClient: () => ElnoraApiC
       },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
-    async ({ task_id, limit, offset }) => {
+    withGuard("elnora_get_task_messages", getContext, async ({ task_id, limit, offset }) => {
       try {
         const result = await getClient().getTaskMessages(task_id, limit, offset);
         return {
@@ -79,6 +85,6 @@ export function registerTaskTools(server: McpServer, getClient: () => ElnoraApiC
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
       }
-    },
+    }),
   );
 }

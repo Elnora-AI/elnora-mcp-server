@@ -6,16 +6,27 @@ import { registerMessageTools } from "./tools/messages.js";
 import { registerFileTools } from "./tools/files.js";
 import { registerProtocolTools } from "./tools/protocols.js";
 
-export function createElnoraServer(config: ElnoraConfig, getClient: () => ElnoraApiClient): McpServer {
+export interface RequestContext {
+  client: ElnoraApiClient;
+  clientId: string;
+  scopes: string[];
+}
+
+export function createElnoraServer(
+  config: ElnoraConfig,
+  getContext: () => RequestContext,
+): McpServer {
   const server = new McpServer({
     name: "elnora-mcp-server",
-    version: "0.1.0",
+    version: "0.2.0",
   });
 
-  registerTaskTools(server, getClient);
-  registerMessageTools(server, getClient);
-  registerFileTools(server, getClient);
-  registerProtocolTools(server, getClient);
+  const getClient = () => getContext().client;
+
+  registerTaskTools(server, getClient, getContext);
+  registerMessageTools(server, getClient, getContext);
+  registerFileTools(server, getClient, getContext);
+  registerProtocolTools(server, getClient, getContext);
 
   return server;
 }

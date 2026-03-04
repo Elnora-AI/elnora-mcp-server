@@ -1,9 +1,15 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { ElnoraApiClient } from "../services/elnora-api-client.js";
+import { RequestContext } from "../server.js";
 import { handleApiError } from "../services/error-handler.js";
+import { withGuard } from "./with-guard.js";
 
-export function registerProtocolTools(server: McpServer, getClient: () => ElnoraApiClient): void {
+export function registerProtocolTools(
+  server: McpServer,
+  getClient: () => ElnoraApiClient,
+  getContext: () => RequestContext,
+): void {
   server.registerTool(
     "elnora_generate_protocol",
     {
@@ -25,7 +31,7 @@ Examples:
         openWorldHint: true,
       },
     },
-    async ({ description, title }) => {
+    withGuard("elnora_generate_protocol", getContext, async ({ description, title }) => {
       try {
         const client = getClient();
 
@@ -49,6 +55,6 @@ Examples:
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
       }
-    },
+    }),
   );
 }
