@@ -18,7 +18,7 @@ export function registerMessageTools(
         "Send a message to an Elnora task and receive the AI response. The message is processed by Elnora's AI system, which handles protocol generation, research, and data analysis. This operation may take 30-120 seconds for complex requests.",
       inputSchema: {
         task_id: z.string().uuid().describe("Task UUID"),
-        message: z.string().min(1).max(10000).describe("Message content (markdown supported)"),
+        message: z.string().min(1).max(50_000).describe("Message content (markdown supported)"),
         file_ids: z.array(z.string().uuid()).optional().describe("File IDs to attach"),
       },
       annotations: {

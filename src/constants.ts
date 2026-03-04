@@ -1,8 +1,8 @@
-export const CHARACTER_LIMIT = 25000;
-export const DEFAULT_PAGE_SIZE = 20;
+export const CHARACTER_LIMIT = 100_000;
+export const DEFAULT_PAGE_SIZE = 50;
 export const MAX_PAGE_SIZE = 100;
-export const REQUEST_TIMEOUT_MS = 30000;
-export const LONG_REQUEST_TIMEOUT_MS = 120000;
+export const REQUEST_TIMEOUT_MS = 30_000;
+export const LONG_REQUEST_TIMEOUT_MS = 120_000;
 
 // Auth constants
 export const ACCESS_TOKEN_TTL_SECONDS = 3600; // 1 hour

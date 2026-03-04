@@ -4,9 +4,8 @@ import { REQUEST_TIMEOUT_MS, LONG_REQUEST_TIMEOUT_MS } from "../constants.js";
 
 export class ElnoraApiClient {
   private client: AxiosInstance;
-  private tokenValidationUrl: string;
 
-  constructor(config: ElnoraConfig, private bearerToken: string) {
+  constructor(config: ElnoraConfig, bearerToken: string) {
     this.client = axios.create({
       baseURL: config.apiUrl,
       timeout: REQUEST_TIMEOUT_MS,
@@ -16,7 +15,6 @@ export class ElnoraApiClient {
         Authorization: `Bearer ${bearerToken}`,
       },
     });
-    this.tokenValidationUrl = config.tokenValidationUrl;
   }
 
   // --- Token Validation ---
