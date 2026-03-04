@@ -15,7 +15,7 @@ Add the Elnora MCP server to your AI client. No installation required — just p
 ### Claude Code
 
 ```bash
-claude mcp add elnora --transport streamable-http https://mcp.elnora.ai/mcp
+claude mcp add elnora --transport http https://mcp.elnora.ai/mcp
 ```
 
 ### Cursor
@@ -40,7 +40,7 @@ Add to your `.vscode/mcp.json`:
 {
   "servers": {
     "elnora": {
-      "type": "streamable-http",
+      "type": "http",
       "url": "https://mcp.elnora.ai/mcp"
     }
   }
