@@ -130,6 +130,14 @@ async function main(): Promise<void> {
     }
   });
 
+  // GET and DELETE on /mcp return 405 per MCP Streamable HTTP spec (stateless mode)
+  app.get("/mcp", (_req, res) => {
+    res.status(405).json({ error: "method_not_allowed", error_description: "Stateless server — use POST" });
+  });
+  app.delete("/mcp", (_req, res) => {
+    res.status(405).json({ error: "method_not_allowed", error_description: "Stateless server — sessions not supported" });
+  });
+
   app.listen(config.port, () => {
     console.error(`Elnora MCP server running on http://localhost:${config.port}/mcp`);
     console.error(`OAuth AS Metadata: ${config.publicUrl}/.well-known/oauth-authorization-server`);
