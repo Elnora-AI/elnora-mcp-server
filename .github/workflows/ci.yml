@@ -23,3 +23,11 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm test
+      - name: Generate SBOM (CoSAI MCP-T11)
+        run: npm sbom --sbom-format cyclonedx > sbom.json
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom.json
+          retention-days: 90

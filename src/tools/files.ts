@@ -1,10 +1,16 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { ElnoraApiClient } from "../services/elnora-api-client.js";
+import { RequestContext } from "../server.js";
 import { handleApiError } from "../services/error-handler.js";
+import { withGuard } from "./with-guard.js";
 import { CHARACTER_LIMIT } from "../constants.js";
 
-export function registerFileTools(server: McpServer, getClient: () => ElnoraApiClient): void {
+export function registerFileTools(
+  server: McpServer,
+  getClient: () => ElnoraApiClient,
+  getContext: () => RequestContext,
+): void {
   server.registerTool(
     "elnora_list_files",
     {
@@ -18,7 +24,7 @@ export function registerFileTools(server: McpServer, getClient: () => ElnoraApiC
       },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
-    async ({ project_id, limit, offset }) => {
+    withGuard("elnora_list_files", getContext, async ({ project_id, limit, offset }) => {
       try {
         const result = await getClient().listFiles(project_id, limit, offset);
         return {
@@ -27,7 +33,7 @@ export function registerFileTools(server: McpServer, getClient: () => ElnoraApiC
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
       }
-    },
+    }),
   );
 
   server.registerTool(
@@ -40,7 +46,7 @@ export function registerFileTools(server: McpServer, getClient: () => ElnoraApiC
       },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
-    async ({ file_id }) => {
+    withGuard("elnora_get_file_content", getContext, async ({ file_id }) => {
       try {
         const result = await getClient().getFileContent(file_id);
         return {
@@ -49,7 +55,7 @@ export function registerFileTools(server: McpServer, getClient: () => ElnoraApiC
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
       }
-    },
+    }),
   );
 
   server.registerTool(
@@ -65,7 +71,7 @@ export function registerFileTools(server: McpServer, getClient: () => ElnoraApiC
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
-    async ({ name, content, file_type }) => {
+    withGuard("elnora_upload_file", getContext, async ({ name, content, file_type }) => {
       try {
         const result = await getClient().uploadFile(name, content, file_type);
         return {
@@ -74,6 +80,6 @@ export function registerFileTools(server: McpServer, getClient: () => ElnoraApiC
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
       }
-    },
+    }),
   );
 }

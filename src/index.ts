@@ -6,6 +6,8 @@ import { ElnoraConfig } from "./types.js";
 import { ElnoraApiClient } from "./services/elnora-api-client.js";
 import { ElnoraOAuthProvider } from "./auth/provider.js";
 import { createElnoraServer } from "./server.js";
+import { corsMiddleware } from "./middleware/cors.js";
+import { mcpRateLimiter } from "./middleware/rate-limiter.js";
 import { SUPPORTED_SCOPES } from "./constants.js";
 
 function requireEnv(name: string): string {
@@ -33,7 +35,10 @@ function loadConfig(): ElnoraConfig {
 async function main(): Promise<void> {
   const config = loadConfig();
   const app = express();
-  app.use(express.json());
+
+  // --- Security middleware (CoSAI MCP-T7) ---
+  app.use(corsMiddleware(config));
+  app.use(express.json({ limit: "1mb" })); // Payload size limit (CoSAI MCP-T10)
 
   // Health check (no auth)
   app.get("/health", (_req, res) => {
@@ -59,6 +64,7 @@ async function main(): Promise<void> {
   );
 
   // Platform OAuth callback — receives the auth code from Elnora platform login
+  // CSRF protection: validates mcp_code exists in our session store (CoSAI MCP-T7)
   app.get("/oauth/callback", (req, res) => {
     const mcpCode = req.query.mcp_code as string;
     const platformCode = req.query.code as string;
@@ -88,22 +94,24 @@ async function main(): Promise<void> {
     }
   });
 
-  // --- MCP Endpoint (protected by bearer auth) ---
+  // --- MCP Endpoint (protected by bearer auth + rate limiting) ---
   const authMiddleware = requireBearerAuth({
     verifier: provider,
     requiredScopes: [],
     resourceMetadataUrl: getOAuthProtectedResourceMetadataUrl(mcpServerUrl),
   });
 
-  app.post("/mcp", authMiddleware, async (req, res) => {
+  app.post("/mcp", mcpRateLimiter(), authMiddleware, async (req, res) => {
     try {
-      // Extract platform token from auth info (set by provider.verifyAccessToken)
+      // Extract auth context (set by provider.verifyAccessToken)
       const platformToken = (req.auth?.extra?.platformToken as string) || "";
+      const clientId = req.auth?.clientId || "unknown";
+      const scopes = req.auth?.scopes || [];
 
-      // Create per-request MCP server and API client
+      // Create per-request MCP server and API client with auth context
       const client = new ElnoraApiClient(config, platformToken);
-      const getClient = () => client;
-      const server = createElnoraServer(config, getClient);
+      const getContext = () => ({ client, clientId, scopes });
+      const server = createElnoraServer(config, getContext);
 
       // Stateless transport — new transport per request
       const transport = new StreamableHTTPServerTransport({

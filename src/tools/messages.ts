@@ -1,9 +1,15 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { ElnoraApiClient } from "../services/elnora-api-client.js";
+import { RequestContext } from "../server.js";
 import { handleApiError } from "../services/error-handler.js";
+import { withGuard } from "./with-guard.js";
 
-export function registerMessageTools(server: McpServer, getClient: () => ElnoraApiClient): void {
+export function registerMessageTools(
+  server: McpServer,
+  getClient: () => ElnoraApiClient,
+  getContext: () => RequestContext,
+): void {
   server.registerTool(
     "elnora_send_message",
     {
@@ -22,7 +28,7 @@ export function registerMessageTools(server: McpServer, getClient: () => ElnoraA
         openWorldHint: true,
       },
     },
-    async ({ task_id, message, file_ids }) => {
+    withGuard("elnora_send_message", getContext, async ({ task_id, message, file_ids }) => {
       try {
         const response = await getClient().sendMessage(task_id, message, file_ids);
         return {
@@ -31,6 +37,6 @@ export function registerMessageTools(server: McpServer, getClient: () => ElnoraA
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
       }
-    },
+    }),
   );
 }
