@@ -5,6 +5,26 @@ All notable changes to the Elnora MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.3.0](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v0.2.0...mcp-server-v0.3.0) (2026-03-05)
+
+
+### Features
+
+* add release-please for automatic changelog and npm publishing ([#9](https://github.com/Elnora-AI/elnora-mcp-server/issues/9)) ([3812bc2](https://github.com/Elnora-AI/elnora-mcp-server/commit/3812bc22cdfb832710d947895209b98aba178570))
+* **auth:** OAuth 2.1 proxy AS with SDK v1.27 ([#5](https://github.com/Elnora-AI/elnora-mcp-server/issues/5)) ([4151229](https://github.com/Elnora-AI/elnora-mcp-server/commit/41512290fa1c1690adeb08a32040c78fd712e175))
+* initial release of Elnora MCP Server ([a9a17f9](https://github.com/Elnora-AI/elnora-mcp-server/commit/a9a17f90a127aec7c98f62d43549a33a60ce893e))
+* prepare for MCP Registry registration ([#2](https://github.com/Elnora-AI/elnora-mcp-server/issues/2)) ([3ecf8fc](https://github.com/Elnora-AI/elnora-mcp-server/commit/3ecf8fc803b1b7dba4333faf5eca44766cc70c6a))
+
+
+### Bug Fixes
+
+* **ci:** re-add --provenance flag now that repo is public ([9da065b](https://github.com/Elnora-AI/elnora-mcp-server/commit/9da065bbd52859bd969f00c8604d596e2a889976))
+* **ci:** remove --provenance flag for private repo npm publish ([325d405](https://github.com/Elnora-AI/elnora-mcp-server/commit/325d4051ae19a760d0a84bcd3cf321ea8e802b30))
+* **ci:** skip CodeQL on private repos ([abdf017](https://github.com/Elnora-AI/elnora-mcp-server/commit/abdf017fb229c84a7f07c5d1a3e235c5ad7f1d93))
+* **docs:** correct MCP transport type in client setup instructions ([#4](https://github.com/Elnora-AI/elnora-mcp-server/issues/4)) ([191128a](https://github.com/Elnora-AI/elnora-mcp-server/commit/191128a0d609b2199520145bc8f0d2e7415d3ee0))
+* raise limits for real-world usage, add MCP spec-compliant 405 handlers ([#6](https://github.com/Elnora-AI/elnora-mcp-server/issues/6)) ([05c393c](https://github.com/Elnora-AI/elnora-mcp-server/commit/05c393cd7ce3c6a09962572dfb97e349b643806d))
+* use correct transport type key in server.json remotes ([#3](https://github.com/Elnora-AI/elnora-mcp-server/issues/3)) ([518fc62](https://github.com/Elnora-AI/elnora-mcp-server/commit/518fc62093cfa294950c8b1a0abc450aca6b4a49))
+
 ## [Unreleased]
 
 ## [0.1.0] - 2026-02-27
