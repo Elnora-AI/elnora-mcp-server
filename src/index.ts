@@ -10,6 +10,7 @@ import { corsMiddleware } from "./middleware/cors.js";
 import { mcpRateLimiter } from "./middleware/rate-limiter.js";
 import { SUPPORTED_SCOPES, ALL_SCOPES } from "./constants.js";
 import { logAuthEvent } from "./middleware/tool-logging.js";
+import rateLimit from "express-rate-limit";
 import axios from "axios";
 
 function requireEnv(name: string): string {
@@ -147,27 +148,37 @@ async function main(): Promise<void> {
     resourceMetadataUrl: getOAuthProtectedResourceMetadataUrl(mcpServerUrl),
   });
 
+  // Rate limiter for /mcp — uses express-rate-limit (CoSAI MCP-T10)
+  const mcpEndpointLimiter = rateLimit({
+    windowMs: 60_000,
+    limit: 60,
+    standardHeaders: "draft-7",
+    legacyHeaders: false,
+    keyGenerator: (req) => {
+      const authHeader = req.headers.authorization;
+      const apiKeyHeader = req.headers["x-api-key"];
+      if (authHeader) return `auth:${authHeader.slice(-16)}`;
+      if (apiKeyHeader) return `key:${String(apiKeyHeader).slice(-8)}`;
+      return `ip:${req.ip || req.socket.remoteAddress || "unknown"}`;
+    },
+    message: { error: "rate_limit_exceeded", error_description: "Too many requests. Please retry later." },
+  });
+
   /**
-   * Authenticate via API key (validated by platform) or OAuth bearer token.
-   * Both paths delegate the security decision to a trusted authority:
-   * - API key: validated by the Elnora platform's token validation endpoint
-   * - Bearer token: validated by the OAuth provider's verifyAccessToken
-   *
-   * The platform is the sole authority for API key validation — no local
-   * checks gate access. The platform returns a user_id which is used as
-   * the client identifier for audit logging (no local hashing of secrets).
+   * Middleware 1: API key authentication (runs first).
+   * If X-API-Key header is present, validates against the platform.
+   * If valid, sets auth context and calls next(). If invalid, returns 401.
+   * If no API key header, calls next() to proceed to OAuth middleware.
    */
-  async function dualAuthMiddleware(req: Request, res: Response, next: NextFunction): Promise<void> {
-    // Determine auth method from headers — both paths validate server-side
+  async function apiKeyAuthMiddleware(req: Request, res: Response, next: NextFunction): Promise<void> {
     const apiKey = req.headers["x-api-key"] as string | undefined;
 
-    // No API key header → standard OAuth bearer auth
     if (!apiKey) {
-      oauthMiddleware(req, res, next);
+      next();
       return;
     }
 
-    // API key present → validate against the platform (CoSAI MCP-T7)
+    // Validate against the platform (CoSAI MCP-T7)
     const result = await validateApiKeyWithPlatform(apiKey, config);
 
     if (!result) {
@@ -195,8 +206,24 @@ async function main(): Promise<void> {
     next();
   }
 
-  // --- MCP Endpoint (protected by dual auth + rate limiting) ---
-  app.post("/mcp", mcpRateLimiter(), dualAuthMiddleware, async (req, res) => {
+  /**
+   * Middleware 2: Ensure request is authenticated.
+   * If auth context was set by apiKeyAuthMiddleware, proceeds.
+   * Otherwise delegates to OAuth bearer token verification.
+   */
+  function ensureAuthenticated(req: Request, res: Response, next: NextFunction): void {
+    const auth = (req as unknown as Record<string, unknown>).auth;
+    if (auth) {
+      // Already authenticated via API key
+      next();
+      return;
+    }
+    // Delegate to OAuth bearer token verification
+    oauthMiddleware(req, res, next);
+  }
+
+  // --- MCP Endpoint (protected by rate limiting + dual auth) ---
+  app.post("/mcp", mcpEndpointLimiter, apiKeyAuthMiddleware, ensureAuthenticated, async (req: Request, res: Response) => {
     try {
       const auth = (req as unknown as Record<string, unknown>).auth as {
         extra?: { platformToken?: string; apiKey?: string };
