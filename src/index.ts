@@ -9,7 +9,7 @@ import { createElnoraServer } from "./server.js";
 import { corsMiddleware } from "./middleware/cors.js";
 import { SUPPORTED_SCOPES, ALL_SCOPES } from "./constants.js";
 import { logAuthEvent } from "./middleware/tool-logging.js";
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import axios from "axios";
 
 function requireEnv(name: string): string {
@@ -163,7 +163,7 @@ async function main(): Promise<void> {
       const apiKeyHeader = req.headers["x-api-key"];
       if (authHeader) return `auth:${authHeader.slice(-16)}`;
       if (apiKeyHeader) return `key:${String(apiKeyHeader).slice(-8)}`;
-      return `ip:${req.ip || req.socket.remoteAddress || "unknown"}`;
+      return `ip:${ipKeyGenerator(req.ip || req.socket.remoteAddress || "unknown")}`;
     },
     message: { error: "rate_limit_exceeded", error_description: "Too many requests. Please retry later." },
   }));
