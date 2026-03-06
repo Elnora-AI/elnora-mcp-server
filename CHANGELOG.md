@@ -5,6 +5,13 @@ All notable changes to the Elnora MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.4.0](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v0.3.0...mcp-server-v0.4.0) (2026-03-06)
+
+
+### Features
+
+* add API key auth, expand tool coverage, and harden security ([#11](https://github.com/Elnora-AI/elnora-mcp-server/issues/11)) ([3d51d39](https://github.com/Elnora-AI/elnora-mcp-server/commit/3d51d393b800f80f2489a5d49223015948f5b559))
+
 ## [0.3.0](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v0.2.0...mcp-server-v0.3.0) (2026-03-05)
 
 
