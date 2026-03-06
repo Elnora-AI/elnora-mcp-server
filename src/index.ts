@@ -7,7 +7,6 @@ import { ElnoraApiClient } from "./services/elnora-api-client.js";
 import { ElnoraOAuthProvider } from "./auth/provider.js";
 import { createElnoraServer } from "./server.js";
 import { corsMiddleware } from "./middleware/cors.js";
-import { mcpRateLimiter } from "./middleware/rate-limiter.js";
 import { SUPPORTED_SCOPES, ALL_SCOPES } from "./constants.js";
 import { logAuthEvent } from "./middleware/tool-logging.js";
 import rateLimit from "express-rate-limit";
@@ -112,18 +111,23 @@ async function main(): Promise<void> {
   // Platform OAuth callback — receives the auth code from Elnora platform login
   // CSRF protection: validates mcp_code exists in our session store (CoSAI MCP-T7)
   // Rate limited to prevent brute-force auth code guessing (CoSAI MCP-T10)
-  app.get("/oauth/callback", mcpRateLimiter({ maxRequests: 20, windowMs: 60_000 }), (req, res) => {
+  const callbackLimiter = rateLimit({
+    windowMs: 60_000,
+    limit: 20,
+    standardHeaders: "draft-7",
+    legacyHeaders: false,
+    message: { error: "rate_limit_exceeded", error_description: "Too many callback requests. Please retry later." },
+  });
+  app.get("/oauth/callback", callbackLimiter, (req, res) => {
     const mcpCode = req.query.mcp_code as string;
     const platformCode = req.query.code as string;
-    const error = req.query.error as string;
 
-    if (error) {
-      logAuthEvent("platform_callback_error", "unknown", { error });
-      res.status(400).json({ error: "platform_auth_failed", error_description: error });
-      return;
-    }
-
+    // Both parameters are required for a valid callback — reject if either is missing.
+    // An OAuth error response from the platform will also lack `code`, so it's caught here.
     if (!mcpCode || !platformCode) {
+      const errorParam = req.query.error;
+      const context = typeof errorParam === "string" ? errorParam.replace(/[\x00-\x1f\x7f]/g, "").slice(0, 200) : "missing_params";
+      logAuthEvent("platform_callback_error", "unknown", { reason: context });
       res.status(400).json({ error: "invalid_request", error_description: "Missing mcp_code or code parameter" });
       return;
     }
@@ -151,7 +155,7 @@ async function main(): Promise<void> {
   // Rate limiter for /mcp — applied at app level so CodeQL sees it (CoSAI MCP-T10)
   app.use("/mcp", rateLimit({
     windowMs: 60_000,
-    limit: 60,
+    limit: 150,
     standardHeaders: "draft-7",
     legacyHeaders: false,
     keyGenerator: (req) => {
