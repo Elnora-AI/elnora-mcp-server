@@ -5,6 +5,13 @@ All notable changes to the Elnora MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.4.1](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v0.4.0...mcp-server-v0.4.1) (2026-03-06)
+
+
+### Bug Fixes
+
+* default HOST to 0.0.0.0 so ECS health checks can connect ([#14](https://github.com/Elnora-AI/elnora-mcp-server/issues/14)) ([8fa4c8c](https://github.com/Elnora-AI/elnora-mcp-server/commit/8fa4c8cc0cf4aaead25e9b910bce936c12b96360))
+
 ## [0.4.0](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v0.3.0...mcp-server-v0.4.0) (2026-03-06)
 
 
