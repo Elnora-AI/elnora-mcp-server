@@ -1,6 +1,8 @@
+import crypto from "node:crypto";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { mcpAuthRouter, getOAuthProtectedResourceMetadataUrl } from "@modelcontextprotocol/sdk/server/auth/router.js";
 import { requireBearerAuth } from "@modelcontextprotocol/sdk/server/auth/middleware/bearerAuth.js";
+import { AuthInfo } from "@modelcontextprotocol/sdk/server/auth/types.js";
 import express, { Request, Response, NextFunction } from "express";
 import { ElnoraConfig } from "./types.js";
 import { ElnoraApiClient } from "./services/elnora-api-client.js";
@@ -9,7 +11,7 @@ import { createElnoraServer } from "./server.js";
 import { corsMiddleware } from "./middleware/cors.js";
 import { SUPPORTED_SCOPES, ALL_SCOPES } from "./constants.js";
 import { logAuthEvent } from "./middleware/tool-logging.js";
-import rateLimit, { ipKeyGenerator } from "express-rate-limit";
+import rateLimit from "express-rate-limit";
 import axios from "axios";
 
 function requireEnv(name: string): string {
@@ -45,14 +47,15 @@ async function validateApiKeyWithPlatform(
   try {
     const validation = await axios.post(
       config.tokenValidationUrl,
-      {},
-      { headers: { Authorization: `Bearer ${apiKey}` }, timeout: 10_000 },
+      { token: apiKey },
+      { timeout: 10_000 },
     );
     if (validation.data.valid && validation.data.user_id) {
       return { userId: String(validation.data.user_id) };
     }
     return null;
-  } catch {
+  } catch (err) {
+    logAuthEvent("api_key_validation_error", "unknown", { error: err instanceof Error ? err.message : "Unknown error" });
     return null;
   }
 }
@@ -121,26 +124,26 @@ async function main(): Promise<void> {
   app.get("/oauth/callback", callbackLimiter, (req, res) => {
     const mcpCode = req.query.mcp_code as string;
     const platformCode = req.query.code as string;
+    const platformState = req.query.state as string;
 
-    // Both parameters are required for a valid callback — reject if either is missing.
+    // All parameters are required for a valid callback — reject if any is missing.
     // An OAuth error response from the platform will also lack `code`, so it's caught here.
-    if (!mcpCode || !platformCode) {
+    if (!mcpCode || !platformCode || !platformState) {
       const errorParam = req.query.error;
       const context = typeof errorParam === "string" ? errorParam.replace(/[\x00-\x1f\x7f]/g, "").slice(0, 200) : "missing_params";
       logAuthEvent("platform_callback_error", "unknown", { reason: context });
-      res.status(400).json({ error: "invalid_request", error_description: "Missing mcp_code or code parameter" });
+      res.status(400).json({ error: "invalid_request", error_description: "Missing mcp_code, code, or state parameter" });
       return;
     }
 
     try {
-      provider.handlePlatformCallback(mcpCode, platformCode);
-      const redirectUrl = provider.getClientRedirectUrl(mcpCode);
+      const redirectUrl = provider.handlePlatformCallback(mcpCode, platformCode, platformState);
       res.redirect(redirectUrl);
     } catch (err) {
       logAuthEvent("platform_callback_failed", "unknown", { error: String(err) });
       res.status(400).json({
         error: "invalid_grant",
-        error_description: err instanceof Error ? err.message : "Callback processing failed",
+        error_description: "Authorization callback failed",
       });
     }
   });
@@ -161,9 +164,13 @@ async function main(): Promise<void> {
     keyGenerator: (req) => {
       const authHeader = req.headers.authorization;
       const apiKeyHeader = req.headers["x-api-key"];
-      if (authHeader) return `auth:${authHeader.slice(-16)}`;
-      if (apiKeyHeader) return `key:${String(apiKeyHeader).slice(-8)}`;
-      return `ip:${ipKeyGenerator(req.ip || req.socket.remoteAddress || "unknown")}`;
+      if (authHeader) return `auth:${crypto.createHash("sha256").update(authHeader).digest("hex").slice(0, 16)}`;
+      if (apiKeyHeader) return `key:${crypto.createHash("sha256").update(String(apiKeyHeader)).digest("hex").slice(0, 16)}`;
+      const ip = req.ip || req.socket.remoteAddress;
+      if (!ip) return `ip:unresolved:${crypto.randomUUID()}`;
+      // Normalize IPv6-mapped IPv4 (e.g. ::ffff:127.0.0.1 → 127.0.0.1)
+      const normalized = ip.startsWith("::ffff:") ? ip.slice(7) : ip;
+      return `ip:${normalized}`;
     },
     message: { error: "rate_limit_exceeded", error_description: "Too many requests. Please retry later." },
   }));
@@ -200,14 +207,15 @@ async function main(): Promise<void> {
     // Use platform-assigned user ID as client identifier (no local hashing)
     const apiKeyClientId = `apikey:${result.userId}`;
 
-    // Set auth context compatible with OAuth flow
+    // Set auth context compatible with OAuth flow — use SDK's typed req.auth
     // API key users get all scopes — platform enforces permissions
-    (req as unknown as Record<string, unknown>).auth = {
+    // Store isApiKeyAuth flag — never store raw API key in extra (leakable if logged)
+    req.auth = {
       token: apiKey,
       clientId: apiKeyClientId,
       scopes: ALL_SCOPES,
-      extra: { apiKey },
-    };
+      extra: { isApiKeyAuth: true },
+    } satisfies AuthInfo;
 
     logAuthEvent("api_key_authenticated", apiKeyClientId);
     next();
@@ -219,8 +227,7 @@ async function main(): Promise<void> {
    * Otherwise delegates to OAuth bearer token verification.
    */
   function ensureAuthenticated(req: Request, res: Response, next: NextFunction): void {
-    const auth = (req as unknown as Record<string, unknown>).auth;
-    if (auth) {
+    if (req.auth) {
       // Already authenticated via API key
       next();
       return;
@@ -231,39 +238,47 @@ async function main(): Promise<void> {
 
   // --- MCP Endpoint (protected by dual auth — rate limiting applied via app.use above) ---
   app.post("/mcp", apiKeyAuthMiddleware, ensureAuthenticated, async (req: Request, res: Response) => {
+    let server: ReturnType<typeof createElnoraServer> | undefined;
+    let transport: StreamableHTTPServerTransport | undefined;
     try {
-      const auth = (req as unknown as Record<string, unknown>).auth as {
-        extra?: { platformToken?: string; apiKey?: string };
-        clientId?: string;
-        scopes?: string[];
-      } | undefined;
+      const auth = req.auth;
 
-      const apiKey = auth?.extra?.apiKey as string | undefined;
-      const platformToken = (auth?.extra?.platformToken as string) || "";
+      const isApiKeyAuth = auth?.extra?.isApiKeyAuth === true;
       const clientId = auth?.clientId || "unknown";
       const scopes = auth?.scopes || [];
 
-      // Create per-request API client — API key or bearer token
-      const client = apiKey
-        ? new ElnoraApiClient(config, { apiKey })
-        : new ElnoraApiClient(config, platformToken);
+      // Retrieve platform token via provider method (not via AuthInfo.extra — CoSAI MCP-T1)
+      const platformToken = !isApiKeyAuth && auth?.token ? provider.getPlatformToken(auth.token) : undefined;
+
+      // Guard against empty/missing platform token
+      if (!isApiKeyAuth && !platformToken) {
+        res.status(401).json({ error: "invalid_token", error_description: "No platform token available" });
+        return;
+      }
+
+      // Create per-request API client — API key (from auth.token) or bearer token
+      const client = isApiKeyAuth
+        ? new ElnoraApiClient(config, { apiKey: auth!.token })
+        : new ElnoraApiClient(config, platformToken!);
 
       const getContext = () => ({ client, clientId, scopes });
-      const server = createElnoraServer(config, getContext);
+      server = createElnoraServer(getContext);
 
       // Stateless transport — new transport per request
-      const transport = new StreamableHTTPServerTransport({
+      transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: undefined,
         enableJsonResponse: true,
       });
 
       res.on("close", () => {
-        transport.close().catch(() => {});
-        server.close().catch(() => {});
+        transport?.close().catch(() => {});
+        server?.close().catch(() => {});
       });
       await server.connect(transport);
       await transport.handleRequest(req, res, req.body);
     } catch (error) {
+      transport?.close().catch(() => {});
+      server?.close().catch(() => {});
       console.error("MCP request error:", error);
       if (!res.headersSent) {
         res.status(500).json({ error: "internal_error", error_description: "MCP request failed" });
@@ -284,9 +299,21 @@ async function main(): Promise<void> {
     console.error(`Elnora MCP server running on http://${host}:${config.port}/mcp`);
     console.error(`OAuth AS Metadata: ${config.publicUrl}/.well-known/oauth-authorization-server`);
     console.error(`Protected Resource Metadata: ${getOAuthProtectedResourceMetadataUrl(mcpServerUrl)}`);
-    console.error(`API Key auth: Send X-API-Key header with elnora_live_* key`);
+    console.error(`API Key auth: Send X-API-Key header`);
     console.error(`Health check: http://localhost:${config.port}/health`);
   });
+
+  // Graceful shutdown — let in-flight requests drain before ECS kills the process
+  const gracefulShutdown = (signal: string) => {
+    console.error(`${signal} received — shutting down gracefully`);
+    httpServer.close(() => {
+      process.exit(0);
+    });
+    // Force-exit after 25s if connections haven't drained
+    setTimeout(() => process.exit(1), 25_000).unref();
+  };
+  process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+  process.on("SIGINT", () => gracefulShutdown("SIGINT"));
 
   // Handle server-level errors (port in use, etc.) — prevents unhandled crash
   httpServer.on("error", (err: NodeJS.ErrnoException) => {

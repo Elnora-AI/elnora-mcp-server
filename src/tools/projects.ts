@@ -88,7 +88,14 @@ export function registerProjectTools(
     },
     withGuard("elnora_update_project", getContext, async ({ project_id, name, description, icon }) => {
       try {
-        const result = await getClient().put(`/projects/${project_id}`, { name, description, icon });
+        const body: Record<string, string> = {};
+        if (name !== undefined) body.name = name;
+        if (description !== undefined) body.description = description;
+        if (icon !== undefined) body.icon = icon;
+        if (Object.keys(body).length === 0) {
+          return { content: [{ type: "text" as const, text: "Error: At least one field (name, description, or icon) must be provided." }], isError: true };
+        }
+        const result = await getClient().put(`/projects/${project_id}`, body);
         return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
@@ -143,8 +150,8 @@ export function registerProjectTools(
       description: "Add a user to a project.",
       inputSchema: {
         project_id: z.string().uuid().describe("Project UUID"),
-        user_id: z.string().max(255).describe("User ID to add"),
-        role: z.string().max(100).default("Member").optional().describe("Role (default: Member)"),
+        user_id: z.string().min(1).max(255).describe("User ID to add"),
+        role: z.string().max(100).default("Member").describe("Role (default: Member)"),
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
@@ -165,8 +172,8 @@ export function registerProjectTools(
       description: "Change a project member's role.",
       inputSchema: {
         project_id: z.string().uuid().describe("Project UUID"),
-        user_id: z.string().max(255).describe("User ID"),
-        role: z.string().max(100).describe("New role"),
+        user_id: z.string().min(1).max(255).describe("User ID"),
+        role: z.string().min(1).max(100).describe("New role"),
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
@@ -187,7 +194,7 @@ export function registerProjectTools(
       description: "Remove a user from a project.",
       inputSchema: {
         project_id: z.string().uuid().describe("Project UUID"),
-        user_id: z.string().max(255).describe("User ID to remove"),
+        user_id: z.string().min(1).max(255).describe("User ID to remove"),
       },
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
     },

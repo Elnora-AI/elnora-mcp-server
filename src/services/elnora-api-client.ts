@@ -4,8 +4,12 @@ import { REQUEST_TIMEOUT_MS, LONG_REQUEST_TIMEOUT_MS } from "../constants.js";
 
 export class ElnoraApiClient {
   private client: AxiosInstance;
+  private originUrl: string;
 
   constructor(config: Pick<ElnoraConfig, "apiUrl">, auth: string | { apiKey: string }) {
+    // Derive origin (scheme + host) for root-level endpoints like /health
+    const parsed = new URL(config.apiUrl);
+    this.originUrl = parsed.origin;
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
       Accept: "application/json",
@@ -54,6 +58,12 @@ export class ElnoraApiClient {
     return response.data;
   }
 
+  /** Hit root-level /health (not under /api/v1). */
+  async healthCheck(): Promise<unknown> {
+    const response = await this.client.get<unknown>(`${this.originUrl}/health`, { timeout: REQUEST_TIMEOUT_MS });
+    return response.data;
+  }
+
   // --- Convenience methods used by tool handlers ---
 
   async sendMessage(taskId: string, content: string, fileIds?: string[]): Promise<unknown> {
@@ -65,6 +75,6 @@ export class ElnoraApiClient {
   }
 
   async uploadFile(name: string, content: string, fileType?: string): Promise<unknown> {
-    return this.post("/files", { name, content, fileType: fileType || "text/markdown" });
+    return this.post("/files/content", { name, content, fileType: fileType || "text/markdown" });
   }
 }

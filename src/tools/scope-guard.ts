@@ -6,7 +6,7 @@ export const TOOL_SCOPES: Record<string, string[]> = {
   // Tasks
   elnora_list_tasks: ["tasks:read"],
   elnora_get_task: ["tasks:read"],
-  elnora_get_task_messages: ["tasks:read"],
+  elnora_get_task_messages: ["messages:read"],
   elnora_create_task: ["tasks:write"],
   elnora_update_task: ["tasks:write"],
   elnora_archive_task: ["tasks:write"],
@@ -63,7 +63,7 @@ export const TOOL_SCOPES: Record<string, string[]> = {
   elnora_invite_org_member: ["orgs:write"],
   elnora_list_org_invitations: ["orgs:read"],
   elnora_cancel_org_invitation: ["orgs:write"],
-  elnora_get_invitation_info: ["orgs:read"],
+  elnora_get_invitation_info: [],
   elnora_accept_invitation: ["orgs:write"],
 
   // Folders
@@ -114,7 +114,7 @@ export function checkToolScopes(toolName: string, grantedScopes: string[]): stri
   const required = TOOL_SCOPES[toolName];
   if (!required) {
     // Deny-by-default: unknown tools must not bypass scope checks (CoSAI MCP-T2)
-    return ["unknown_tool"];
+    return [`tool_not_registered:${toolName}`];
   }
   // Empty array means no scopes required (e.g. health check) — always allowed
   return required.filter((s) => !grantedScopes.includes(s));

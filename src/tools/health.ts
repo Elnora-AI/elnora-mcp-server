@@ -19,7 +19,7 @@ export function registerHealthTools(
     },
     withGuard("elnora_health_check", getContext, async () => {
       try {
-        const result = await getClient().get("/health");
+        const result = await getClient().healthCheck();
         return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };

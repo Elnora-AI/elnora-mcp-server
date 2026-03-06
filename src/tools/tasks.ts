@@ -25,12 +25,29 @@ export function registerTaskTools(
     },
     withGuard("elnora_create_task", getContext, async ({ project_id, title, initial_message, context_file_ids }) => {
       try {
+        const client = getClient();
         const body: Record<string, unknown> = { title: title || "New Task" };
         if (project_id) body.projectId = project_id;
-        if (initial_message) body.initialMessage = initial_message;
         if (context_file_ids) body.contextFileIds = context_file_ids;
-        const result = await getClient().post("/tasks", body);
-        return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
+        const task = await client.post<{ id: string }>("/tasks", body);
+
+        // Two-step: create task then send initial message (API does not accept initialMessage in POST /tasks)
+        if (initial_message && task?.id) {
+          try {
+            const response = await client.sendMessage(task.id, initial_message);
+            return { content: [{ type: "text" as const, text: JSON.stringify({ ...task, initial_response: response }) }] };
+          } catch (msgError) {
+            return {
+              content: [{ type: "text" as const, text: JSON.stringify({
+                error: `Task created but initial message failed: ${msgError instanceof Error ? msgError.message : String(msgError)}. Retry with elnora_send_message.`,
+                task_id: task.id,
+              }) }],
+              isError: true,
+            };
+          }
+        }
+
+        return { content: [{ type: "text" as const, text: JSON.stringify(task) }] };
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
       }
@@ -119,7 +136,13 @@ export function registerTaskTools(
     },
     withGuard("elnora_update_task", getContext, async ({ task_id, title, status }) => {
       try {
-        const result = await getClient().put(`/tasks/${task_id}`, { title, status });
+        const body: Record<string, string> = {};
+        if (title !== undefined) body.title = title;
+        if (status !== undefined) body.status = status;
+        if (Object.keys(body).length === 0) {
+          return { content: [{ type: "text" as const, text: "Error: At least one field (title or status) must be provided." }], isError: true };
+        }
+        const result = await getClient().put(`/tasks/${task_id}`, body);
         return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };

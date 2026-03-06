@@ -19,7 +19,7 @@ describe("checkToolScopes", () => {
 
   it("denies unknown tools (deny-by-default)", () => {
     const missing = checkToolScopes("nonexistent_tool", ["tasks:read"]);
-    expect(missing).toContain("unknown_tool");
+    expect(missing).toContain("tool_not_registered:nonexistent_tool");
     expect(missing.length).toBeGreaterThan(0);
   });
 

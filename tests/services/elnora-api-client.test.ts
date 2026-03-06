@@ -166,7 +166,7 @@ describe("ElnoraApiClient", () => {
       const result = await client.uploadFile("test.md", "# Content");
 
       expect(mockPost).toHaveBeenCalledWith(
-        "/files",
+        "/files/content",
         { name: "test.md", content: "# Content", fileType: "text/markdown" },
         undefined,
       );
@@ -180,10 +180,22 @@ describe("ElnoraApiClient", () => {
       await client.uploadFile("data.json", "{}", "application/json");
 
       expect(mockPost).toHaveBeenCalledWith(
-        "/files",
+        "/files/content",
         { name: "data.json", content: "{}", fileType: "application/json" },
         undefined,
       );
+    });
+  });
+
+  describe("healthCheck", () => {
+    it("calls root-level /health using the instance client", async () => {
+      mockGet.mockResolvedValueOnce({ data: { status: "ok" } });
+
+      const client = new ElnoraApiClient({ apiUrl: "https://api.test.com/api/v1" }, "token");
+      const result = await client.healthCheck();
+
+      expect(mockGet).toHaveBeenCalledWith("https://api.test.com/health", { timeout: 30000 });
+      expect(result).toEqual({ status: "ok" });
     });
   });
 });

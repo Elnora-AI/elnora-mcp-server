@@ -24,24 +24,6 @@ export function logAuthEvent(
 }
 
 /**
- * Structured rate limit event logger.
- */
-export function logRateLimitEvent(
-  key: string,
-  count: number,
-  limit: number,
-): void {
-  const entry = {
-    type: "rate_limit_block",
-    timestamp: new Date().toISOString(),
-    key,
-    count,
-    limit,
-  };
-  console.error(JSON.stringify(entry));
-}
-
-/**
  * Tool invocation audit logger.
  * CoSAI MCP-T12: Log every tool call with tool name, parameters, user ID, timestamp.
  *
@@ -70,7 +52,7 @@ export function logToolInvocation(
  * Sanitize a string for safe log output.
  * Strips control characters that could enable log injection / log forging.
  */
-export function sanitizeLogValue(value: string): string {
+function sanitizeLogValue(value: string): string {
   return value.replace(/[\x00-\x1f\x7f]/g, "").slice(0, 500);
 }
 
@@ -79,8 +61,8 @@ export function sanitizeLogValue(value: string): string {
  * Keep keys and value types visible for debugging, but mask actual content
  * for fields that might contain user data.
  */
-const REDACT_CONTENT_KEYS = new Set(["content", "message", "description", "initial_message"]);
-const REDACT_PII_KEYS = new Set(["email", "first_name", "last_name", "token"]);
+const REDACT_CONTENT_KEYS = new Set(["content", "message", "description", "initial_message", "query"]);
+const REDACT_PII_KEYS = new Set(["email", "first_name", "last_name", "token", "platformToken", "apiKey"]);
 const REDACT_ARRAY_KEYS = new Set(["file_ids", "context_file_ids", "scopes"]);
 
 function sanitizeParams(params: Record<string, unknown>): Record<string, unknown> {

@@ -44,7 +44,13 @@ export function registerAccountTools(
     },
     withGuard("elnora_update_account", getContext, async ({ user_id, first_name, last_name }) => {
       try {
-        const result = await getClient().put(`/account/user/${user_id}`, { firstName: first_name, lastName: last_name });
+        const body: Record<string, string> = {};
+        if (first_name !== undefined) body.firstName = first_name;
+        if (last_name !== undefined) body.lastName = last_name;
+        if (Object.keys(body).length === 0) {
+          return { content: [{ type: "text" as const, text: "Error: At least one field (first_name or last_name) must be provided." }], isError: true };
+        }
+        const result = await getClient().put(`/account/user/${user_id}`, body);
         return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
@@ -76,9 +82,9 @@ export function registerAccountTools(
       title: "Accept Terms",
       description: "Accept a user agreement version.",
       inputSchema: {
-        document_version_id: z.string().max(255).describe("Document version ID to accept"),
+        document_version_id: z.string().min(1).max(255).describe("Document version ID to accept"),
       },
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
     withGuard("elnora_accept_terms", getContext, async ({ document_version_id }) => {
       try {

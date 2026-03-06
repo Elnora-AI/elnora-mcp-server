@@ -83,7 +83,13 @@ export function registerOrgTools(
     },
     withGuard("elnora_update_org", getContext, async ({ org_id, name, description }) => {
       try {
-        const result = await getClient().put(`/organizations/${org_id}`, { name, description });
+        const body: Record<string, string> = {};
+        if (name !== undefined) body.name = name;
+        if (description !== undefined) body.description = description;
+        if (Object.keys(body).length === 0) {
+          return { content: [{ type: "text" as const, text: "Error: At least one field (name or description) must be provided." }], isError: true };
+        }
+        const result = await getClient().put(`/organizations/${org_id}`, body);
         return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
@@ -118,8 +124,8 @@ export function registerOrgTools(
       description: "Change an organization member's role.",
       inputSchema: {
         org_id: z.string().uuid().describe("Organization UUID"),
-        member_id: z.string().max(255).describe("Member ID"),
-        role: z.string().max(100).describe("New role"),
+        member_id: z.string().min(1).max(255).describe("Member ID"),
+        role: z.string().min(1).max(100).describe("New role"),
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
@@ -140,7 +146,7 @@ export function registerOrgTools(
       description: "Remove a member from an organization.",
       inputSchema: {
         org_id: z.string().uuid().describe("Organization UUID"),
-        member_id: z.string().max(255).describe("Member ID"),
+        member_id: z.string().min(1).max(255).describe("Member ID"),
       },
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
     },
@@ -223,7 +229,7 @@ export function registerOrgTools(
       description: "Cancel a pending organization invitation.",
       inputSchema: {
         org_id: z.string().uuid().describe("Organization UUID"),
-        invitation_id: z.string().max(255).describe("Invitation ID"),
+        invitation_id: z.string().min(1).max(255).describe("Invitation ID"),
       },
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
     },
@@ -241,9 +247,9 @@ export function registerOrgTools(
     "elnora_get_invitation_info",
     {
       title: "Get Invitation Info",
-      description: "Get invitation details by token (public endpoint).",
+      description: "Get invitation details by token. No specific scope required.",
       inputSchema: {
-        token: z.string().max(500).describe("Invitation token"),
+        token: z.string().min(1).max(500).describe("Invitation token"),
       },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
@@ -263,7 +269,7 @@ export function registerOrgTools(
       title: "Accept Invitation",
       description: "Accept an organization invitation by token.",
       inputSchema: {
-        token: z.string().max(500).describe("Invitation token"),
+        token: z.string().min(1).max(500).describe("Invitation token"),
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },

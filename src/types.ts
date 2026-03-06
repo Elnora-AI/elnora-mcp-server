@@ -23,6 +23,8 @@ export interface AuthorizationSession {
   state?: string;
   resource?: string;
   platformCode?: string;
+  /** Random state token sent to platform login — verified on callback (CSRF protection) */
+  platformState: string;
   createdAt: number;
 }
 

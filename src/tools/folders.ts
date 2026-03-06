@@ -80,13 +80,13 @@ export function registerFolderTools(
       description: "Move a folder to a new parent (null for root).",
       inputSchema: {
         folder_id: z.string().uuid().describe("Folder UUID"),
-        parent_id: z.string().uuid().nullable().describe("New parent folder UUID (null for root)"),
+        parent_id: z.string().uuid().optional().describe("New parent folder UUID (omit for root)"),
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
     withGuard("elnora_move_folder", getContext, async ({ folder_id, parent_id }) => {
       try {
-        const result = await getClient().put(`/folders/${folder_id}/move`, { parentId: parent_id });
+        const result = await getClient().put(`/folders/${folder_id}/move`, { parentId: parent_id ?? null });
         return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };

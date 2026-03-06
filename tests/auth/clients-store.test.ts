@@ -31,7 +31,7 @@ describe("InMemoryClientsStore", () => {
     expect(retrieved).toEqual(registered);
   });
 
-  it("returns undefined for expired client secret", () => {
+  it("returns expired client for SDK to handle (per SDK contract)", () => {
     const store = new InMemoryClientsStore();
     const registered = store.registerClient({
       redirect_uris: ["http://localhost:3000/callback"],
@@ -40,8 +40,11 @@ describe("InMemoryClientsStore", () => {
     // Manually expire the secret
     (registered as Record<string, unknown>).client_secret_expires_at = Math.floor(Date.now() / 1000) - 1;
 
+    // SDK docs: "implementations should NOT delete expired client secrets in-place"
+    // The SDK middleware checks client_secret_expires_at and returns the correct RFC 7592 error
     const retrieved = store.getClient(registered.client_id);
-    expect(retrieved).toBeUndefined();
+    expect(retrieved).toBeDefined();
+    expect(retrieved!.client_secret_expires_at).toBeLessThan(Math.floor(Date.now() / 1000));
   });
 
   it("generates unique IDs for each registered client", () => {
@@ -51,5 +54,38 @@ describe("InMemoryClientsStore", () => {
 
     expect(client1.client_id).not.toBe(client2.client_id);
     expect(client1.client_secret).not.toBe(client2.client_secret);
+  });
+
+  it("rejects javascript: redirect URIs", () => {
+    const store = new InMemoryClientsStore();
+    expect(() => store.registerClient({ redirect_uris: ["javascript:alert(1)"] })).toThrow(
+      "redirect_uri must use HTTPS",
+    );
+  });
+
+  it("rejects data: redirect URIs", () => {
+    const store = new InMemoryClientsStore();
+    expect(() => store.registerClient({ redirect_uris: ["data:text/html,<h1>hi</h1>"] })).toThrow(
+      "redirect_uri must use HTTPS",
+    );
+  });
+
+  it("rejects non-localhost HTTP redirect URIs", () => {
+    const store = new InMemoryClientsStore();
+    expect(() => store.registerClient({ redirect_uris: ["http://evil.example.com/callback"] })).toThrow(
+      "HTTP redirect_uri only allowed for localhost",
+    );
+  });
+
+  it("accepts HTTPS redirect URIs", () => {
+    const store = new InMemoryClientsStore();
+    const registered = store.registerClient({ redirect_uris: ["https://app.example.com/callback"] });
+    expect(registered.redirect_uris).toEqual(["https://app.example.com/callback"]);
+  });
+
+  it("accepts localhost HTTP redirect URIs", () => {
+    const store = new InMemoryClientsStore();
+    const registered = store.registerClient({ redirect_uris: ["http://localhost:3000/callback"] });
+    expect(registered.redirect_uris).toEqual(["http://localhost:3000/callback"]);
   });
 });

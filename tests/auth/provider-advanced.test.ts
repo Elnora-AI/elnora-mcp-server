@@ -5,7 +5,7 @@ import type { ElnoraConfig } from "../../src/types.js";
 vi.mock("axios", () => ({
   default: {
     post: vi.fn(),
-    isAxiosError: (e: unknown) => e instanceof Error && "response" in (e as Record<string, unknown>),
+    isAxiosError: (e: unknown) => e instanceof Error && "isAxiosError" in (e as Record<string, unknown>) && (e as Record<string, unknown>).isAxiosError === true,
   },
 }));
 
@@ -23,8 +23,12 @@ const config: ElnoraConfig = {
 };
 
 /** Helper: run the full authorize → callback → exchange flow to get tokens */
-async function issueTokens(provider: ElnoraOAuthProvider, clientId = "test-client") {
-  const client = { client_id: clientId, redirect_uris: ["http://localhost:3000/callback"] };
+async function issueTokens(provider: ElnoraOAuthProvider) {
+  // Register client in the store so handlePlatformCallback can validate redirect_uri
+  const registered = provider.clientsStore.registerClient({
+    redirect_uris: ["http://localhost:3000/callback"],
+  });
+  const client = { client_id: registered.client_id, redirect_uris: ["http://localhost:3000/callback"] };
   const params = {
     codeChallenge: "challenge",
     redirectUri: "http://localhost:3000/callback",
@@ -37,13 +41,14 @@ async function issueTokens(provider: ElnoraOAuthProvider, clientId = "test-clien
   const redirectUrl = new URL(redirectFn.mock.calls[0][0]);
   const mcpCode = redirectUrl.searchParams.get("mcp_code")!;
 
-  provider.handlePlatformCallback(mcpCode, "platform-auth-code");
+  const platformState = redirectUrl.searchParams.get("state")!;
+  provider.handlePlatformCallback(mcpCode, "platform-auth-code", platformState);
 
   vi.mocked(axios.post).mockResolvedValueOnce({
     data: { access_token: "platform-token-123" },
   });
 
-  const tokens = await provider.exchangeAuthorizationCode(client, mcpCode);
+  const tokens = await provider.exchangeAuthorizationCode(client, mcpCode, undefined, "http://localhost:3000/callback");
   return { tokens, client };
 }
 
@@ -57,7 +62,7 @@ describe("ElnoraOAuthProvider — advanced flows", () => {
 
   describe("verifyAccessToken", () => {
     it("returns AuthInfo for a valid token when platform confirms", async () => {
-      const { tokens } = await issueTokens(provider);
+      const { tokens, client } = await issueTokens(provider);
 
       vi.mocked(axios.post).mockResolvedValueOnce({
         data: { valid: true },
@@ -65,9 +70,12 @@ describe("ElnoraOAuthProvider — advanced flows", () => {
 
       const authInfo = await provider.verifyAccessToken(tokens.access_token);
       expect(authInfo.token).toBe(tokens.access_token);
-      expect(authInfo.clientId).toBe("test-client");
+      expect(authInfo.clientId).toBe(client.client_id);
       expect(authInfo.scopes).toEqual(["tasks:read"]);
-      expect(authInfo.extra).toHaveProperty("platformToken", "platform-token-123");
+      // platformToken should NOT be in AuthInfo.extra (CoSAI MCP-T1: no token passthrough)
+      expect(authInfo.extra?.platformToken).toBeUndefined();
+      // But it should be accessible via the dedicated method
+      expect(provider.getPlatformToken(tokens.access_token)).toBe("platform-token-123");
     });
 
     it("revokes token when platform returns { valid: false }", async () => {
@@ -92,6 +100,7 @@ describe("ElnoraOAuthProvider — advanced flows", () => {
 
       const axiosError = new Error("Unauthorized") as Error & { response: { status: number } };
       (axiosError as Record<string, unknown>).response = { status: 401 };
+      (axiosError as Record<string, unknown>).isAxiosError = true;
       vi.mocked(axios.post).mockRejectedValueOnce(axiosError);
 
       await expect(provider.verifyAccessToken(tokens.access_token)).rejects.toThrow(
@@ -99,13 +108,19 @@ describe("ElnoraOAuthProvider — advanced flows", () => {
       );
     });
 
-    it("does NOT revoke token on network error (non-fatal)", async () => {
+    it("rejects on network error (fail-closed for security)", async () => {
       const { tokens } = await issueTokens(provider);
 
       // Network error without response property
       vi.mocked(axios.post).mockRejectedValueOnce(new Error("ECONNREFUSED"));
 
-      // Should succeed despite network error
+      // Should reject — fail-closed behavior
+      await expect(provider.verifyAccessToken(tokens.access_token)).rejects.toThrow(
+        "Platform token validation unavailable",
+      );
+
+      // Token should NOT be deleted — it's a transient failure, not revocation
+      vi.mocked(axios.post).mockResolvedValueOnce({ data: { valid: true } });
       const authInfo = await provider.verifyAccessToken(tokens.access_token);
       expect(authInfo.token).toBe(tokens.access_token);
     });
@@ -143,6 +158,8 @@ describe("ElnoraOAuthProvider — advanced flows", () => {
     it("issues new tokens and rotates the old ones", async () => {
       const { tokens, client } = await issueTokens(provider);
 
+      // Mock platform token re-validation during refresh
+      vi.mocked(axios.post).mockResolvedValueOnce({ data: { valid: true } });
       const newTokens = await provider.exchangeRefreshToken(client, tokens.refresh_token!);
 
       expect(newTokens.access_token).toBeDefined();
@@ -156,6 +173,7 @@ describe("ElnoraOAuthProvider — advanced flows", () => {
     it("invalidates old refresh token after rotation", async () => {
       const { tokens, client } = await issueTokens(provider);
 
+      vi.mocked(axios.post).mockResolvedValueOnce({ data: { valid: true } });
       await provider.exchangeRefreshToken(client, tokens.refresh_token!);
 
       // Old refresh token should no longer work
@@ -175,6 +193,7 @@ describe("ElnoraOAuthProvider — advanced flows", () => {
       const { tokens } = await issueTokens(provider);
       const wrongClient = { client_id: "wrong-client", redirect_uris: [] };
 
+      // client_id mismatch is checked before platform validation
       await expect(
         provider.exchangeRefreshToken(wrongClient, tokens.refresh_token!),
       ).rejects.toThrow("Invalid refresh token");
@@ -183,6 +202,7 @@ describe("ElnoraOAuthProvider — advanced flows", () => {
     it("throws on scope escalation attempt", async () => {
       const { tokens, client } = await issueTokens(provider);
 
+      // Scope escalation is checked before platform validation
       // Original grant was ["tasks:read"]. Try to escalate to ["orgs:write"].
       await expect(
         provider.exchangeRefreshToken(client, tokens.refresh_token!, ["tasks:read", "orgs:write"]),
@@ -192,9 +212,71 @@ describe("ElnoraOAuthProvider — advanced flows", () => {
     it("allows scope downgrade on refresh", async () => {
       const { tokens, client } = await issueTokens(provider);
 
+      vi.mocked(axios.post).mockResolvedValueOnce({ data: { valid: true } });
       // Request a subset of original scopes — should succeed
       const newTokens = await provider.exchangeRefreshToken(client, tokens.refresh_token!, ["tasks:read"]);
       expect(newTokens.access_token).toBeDefined();
+    });
+  });
+
+  describe("handlePlatformCallback", () => {
+    it("throws on callback replay (same code used twice)", async () => {
+      const registered = provider.clientsStore.registerClient({
+        redirect_uris: ["http://localhost:3000/callback"],
+      });
+      const client = { client_id: registered.client_id, redirect_uris: ["http://localhost:3000/callback"] };
+      const params = {
+        codeChallenge: "challenge",
+        redirectUri: "http://localhost:3000/callback",
+        scopes: ["tasks:read"],
+      };
+      const redirectFn = vi.fn();
+      const res = { redirect: redirectFn } as never;
+
+      await provider.authorize(client, params, res);
+      const redirectUrl = new URL(redirectFn.mock.calls[0][0]);
+      const mcpCode = redirectUrl.searchParams.get("mcp_code")!;
+      const platformState = redirectUrl.searchParams.get("state")!;
+
+      provider.handlePlatformCallback(mcpCode, "platform-code-1", platformState);
+
+      expect(() => provider.handlePlatformCallback(mcpCode, "platform-code-2", platformState)).toThrow(
+        "Authorization callback already processed",
+      );
+    });
+  });
+
+  describe("verifyAccessToken — refresh token cleanup on revocation", () => {
+    it("cleans refreshTokenIndex when platform returns { valid: false }", async () => {
+      const { tokens, client } = await issueTokens(provider);
+
+      vi.mocked(axios.post).mockResolvedValueOnce({ data: { valid: false } });
+      await expect(provider.verifyAccessToken(tokens.access_token)).rejects.toThrow(
+        "Underlying platform token revoked",
+      );
+
+      // Refresh token should also be invalidated
+      await expect(
+        provider.exchangeRefreshToken(client, tokens.refresh_token!),
+      ).rejects.toThrow("Invalid refresh token");
+    });
+
+    it("cleans refreshTokenIndex when platform returns 401", async () => {
+      const { tokens, client } = await issueTokens(provider);
+
+      const axiosError = new Error("Unauthorized") as Error & { response: { status: number } };
+      (axiosError as Record<string, unknown>).response = { status: 401 };
+      (axiosError as Record<string, unknown>).isAxiosError = true;
+      vi.mocked(axios.post).mockRejectedValueOnce(axiosError);
+
+      await expect(provider.verifyAccessToken(tokens.access_token)).rejects.toThrow(
+        "Underlying platform token revoked",
+      );
+
+      // Refresh token should also be invalidated
+      await expect(
+        provider.exchangeRefreshToken(client, tokens.refresh_token!),
+      ).rejects.toThrow("Invalid refresh token");
     });
   });
 
