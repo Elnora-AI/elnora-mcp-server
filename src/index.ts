@@ -1,14 +1,16 @@
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { mcpAuthRouter, getOAuthProtectedResourceMetadataUrl } from "@modelcontextprotocol/sdk/server/auth/router.js";
 import { requireBearerAuth } from "@modelcontextprotocol/sdk/server/auth/middleware/bearerAuth.js";
-import express from "express";
+import express, { Request, Response, NextFunction } from "express";
 import { ElnoraConfig } from "./types.js";
 import { ElnoraApiClient } from "./services/elnora-api-client.js";
 import { ElnoraOAuthProvider } from "./auth/provider.js";
 import { createElnoraServer } from "./server.js";
 import { corsMiddleware } from "./middleware/cors.js";
-import { mcpRateLimiter } from "./middleware/rate-limiter.js";
-import { SUPPORTED_SCOPES } from "./constants.js";
+import { SUPPORTED_SCOPES, ALL_SCOPES } from "./constants.js";
+import { logAuthEvent } from "./middleware/tool-logging.js";
+import rateLimit from "express-rate-limit";
+import axios from "axios";
 
 function requireEnv(name: string): string {
   const value = process.env[name];
@@ -21,9 +23,8 @@ function requireEnv(name: string): string {
 function loadConfig(): ElnoraConfig {
   return {
     apiUrl: requireEnv("ELNORA_API_URL"),
-    authUrl: requireEnv("ELNORA_AUTH_URL"),
     tokenValidationUrl: requireEnv("ELNORA_TOKEN_VALIDATION_URL"),
-    port: parseInt(process.env.PORT || "3000", 10),
+    port: (() => { const p = parseInt(process.env.PORT || "3000", 10); return Number.isNaN(p) ? 3000 : p; })(),
     publicUrl: requireEnv("ELNORA_PUBLIC_URL"),
     loginUrl: requireEnv("ELNORA_LOGIN_URL"),
     tokenExchangeUrl: requireEnv("ELNORA_TOKEN_EXCHANGE_URL"),
@@ -32,13 +33,57 @@ function loadConfig(): ElnoraConfig {
   };
 }
 
+/**
+ * Validate an API key against the Elnora platform.
+ * Returns the platform-assigned user identifier on success, or null on failure.
+ * The platform is the sole authority — no local format checks gate access.
+ */
+async function validateApiKeyWithPlatform(
+  apiKey: string,
+  config: ElnoraConfig,
+): Promise<{ userId: string } | null> {
+  try {
+    const validation = await axios.post(
+      config.tokenValidationUrl,
+      {},
+      { headers: { Authorization: `Bearer ${apiKey}` }, timeout: 10_000 },
+    );
+    if (validation.data.valid && validation.data.user_id) {
+      return { userId: String(validation.data.user_id) };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 async function main(): Promise<void> {
   const config = loadConfig();
+
+  // Enforce HTTPS for publicUrl and loginUrl in production (CoSAI MCP-T7)
+  for (const [name, url] of [["publicUrl", config.publicUrl], ["loginUrl", config.loginUrl]] as const) {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "https:" && !["localhost", "127.0.0.1"].includes(parsed.hostname)) {
+      throw new Error(`${name} must use HTTPS in production (got ${parsed.protocol}). Use localhost for development.`);
+    }
+  }
+
   const app = express();
 
   // --- Security middleware (CoSAI MCP-T7) ---
   app.use(corsMiddleware(config));
   app.use(express.json({ limit: "1mb" })); // Payload size limit (CoSAI MCP-T10)
+
+  // Security headers — defense-in-depth (CoSAI MCP-T7)
+  app.use((_req, res, next) => {
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("X-Frame-Options", "DENY");
+    res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+    res.setHeader("X-XSS-Protection", "0"); // Disabled per OWASP (modern browsers don't need it)
+    res.setHeader("Strict-Transport-Security", "max-age=63072000; includeSubDomains");
+    res.setHeader("Cache-Control", "no-store");
+    next();
+  });
 
   // Health check (no auth)
   app.get("/health", (_req, res) => {
@@ -65,18 +110,24 @@ async function main(): Promise<void> {
 
   // Platform OAuth callback — receives the auth code from Elnora platform login
   // CSRF protection: validates mcp_code exists in our session store (CoSAI MCP-T7)
-  app.get("/oauth/callback", (req, res) => {
+  // Rate limited to prevent brute-force auth code guessing (CoSAI MCP-T10)
+  const callbackLimiter = rateLimit({
+    windowMs: 60_000,
+    limit: 20,
+    standardHeaders: "draft-7",
+    legacyHeaders: false,
+    message: { error: "rate_limit_exceeded", error_description: "Too many callback requests. Please retry later." },
+  });
+  app.get("/oauth/callback", callbackLimiter, (req, res) => {
     const mcpCode = req.query.mcp_code as string;
     const platformCode = req.query.code as string;
-    const error = req.query.error as string;
 
-    if (error) {
-      console.error(`[auth] platform callback error: ${error}`);
-      res.status(400).json({ error: "platform_auth_failed", error_description: error });
-      return;
-    }
-
+    // Both parameters are required for a valid callback — reject if either is missing.
+    // An OAuth error response from the platform will also lack `code`, so it's caught here.
     if (!mcpCode || !platformCode) {
+      const errorParam = req.query.error;
+      const context = typeof errorParam === "string" ? errorParam.replace(/[\x00-\x1f\x7f]/g, "").slice(0, 200) : "missing_params";
+      logAuthEvent("platform_callback_error", "unknown", { reason: context });
       res.status(400).json({ error: "invalid_request", error_description: "Missing mcp_code or code parameter" });
       return;
     }
@@ -86,7 +137,7 @@ async function main(): Promise<void> {
       const redirectUrl = provider.getClientRedirectUrl(mcpCode);
       res.redirect(redirectUrl);
     } catch (err) {
-      console.error("[auth] platform callback failed:", err);
+      logAuthEvent("platform_callback_failed", "unknown", { error: String(err) });
       res.status(400).json({
         error: "invalid_grant",
         error_description: err instanceof Error ? err.message : "Callback processing failed",
@@ -94,22 +145,109 @@ async function main(): Promise<void> {
     }
   });
 
-  // --- MCP Endpoint (protected by bearer auth + rate limiting) ---
-  const authMiddleware = requireBearerAuth({
+  // --- Auth middleware for /mcp endpoint ---
+  const oauthMiddleware = requireBearerAuth({
     verifier: provider,
     requiredScopes: [],
     resourceMetadataUrl: getOAuthProtectedResourceMetadataUrl(mcpServerUrl),
   });
 
-  app.post("/mcp", mcpRateLimiter(), authMiddleware, async (req, res) => {
-    try {
-      // Extract auth context (set by provider.verifyAccessToken)
-      const platformToken = (req.auth?.extra?.platformToken as string) || "";
-      const clientId = req.auth?.clientId || "unknown";
-      const scopes = req.auth?.scopes || [];
+  // Rate limiter for /mcp — applied at app level so CodeQL sees it (CoSAI MCP-T10)
+  app.use("/mcp", rateLimit({
+    windowMs: 60_000,
+    limit: 150,
+    standardHeaders: "draft-7",
+    legacyHeaders: false,
+    keyGenerator: (req) => {
+      const authHeader = req.headers.authorization;
+      const apiKeyHeader = req.headers["x-api-key"];
+      if (authHeader) return `auth:${authHeader.slice(-16)}`;
+      if (apiKeyHeader) return `key:${String(apiKeyHeader).slice(-8)}`;
+      return `ip:${req.ip || req.socket.remoteAddress || "unknown"}`;
+    },
+    message: { error: "rate_limit_exceeded", error_description: "Too many requests. Please retry later." },
+  }));
 
-      // Create per-request MCP server and API client with auth context
-      const client = new ElnoraApiClient(config, platformToken);
+  /**
+   * Middleware 1: API key authentication (runs first).
+   * If X-API-Key header is present, validates against the platform.
+   * If valid, sets auth context and calls next(). If invalid, returns 401.
+   * If no API key header, calls next() to proceed to OAuth middleware.
+   */
+  async function apiKeyAuthMiddleware(req: Request, res: Response, next: NextFunction): Promise<void> {
+    const apiKey = req.headers["x-api-key"] as string | undefined;
+
+    // codeql[js/user-controlled-bypass] Dual auth by design: both API key and OAuth paths
+    // validate credentials server-side. API key is validated by the platform's token endpoint;
+    // absence of API key falls through to OAuth bearer token verification in ensureAuthenticated.
+    if (!apiKey) {
+      next();
+      return;
+    }
+
+    // Validate against the platform (CoSAI MCP-T7)
+    const result = await validateApiKeyWithPlatform(apiKey, config);
+
+    if (!result) {
+      logAuthEvent("api_key_rejected", "unknown");
+      res.status(401).json({
+        error: "invalid_api_key",
+        error_description: "API key rejected by platform",
+      });
+      return;
+    }
+
+    // Use platform-assigned user ID as client identifier (no local hashing)
+    const apiKeyClientId = `apikey:${result.userId}`;
+
+    // Set auth context compatible with OAuth flow
+    // API key users get all scopes — platform enforces permissions
+    (req as unknown as Record<string, unknown>).auth = {
+      token: apiKey,
+      clientId: apiKeyClientId,
+      scopes: ALL_SCOPES,
+      extra: { apiKey },
+    };
+
+    logAuthEvent("api_key_authenticated", apiKeyClientId);
+    next();
+  }
+
+  /**
+   * Middleware 2: Ensure request is authenticated.
+   * If auth context was set by apiKeyAuthMiddleware, proceeds.
+   * Otherwise delegates to OAuth bearer token verification.
+   */
+  function ensureAuthenticated(req: Request, res: Response, next: NextFunction): void {
+    const auth = (req as unknown as Record<string, unknown>).auth;
+    if (auth) {
+      // Already authenticated via API key
+      next();
+      return;
+    }
+    // Delegate to OAuth bearer token verification
+    oauthMiddleware(req, res, next);
+  }
+
+  // --- MCP Endpoint (protected by dual auth — rate limiting applied via app.use above) ---
+  app.post("/mcp", apiKeyAuthMiddleware, ensureAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const auth = (req as unknown as Record<string, unknown>).auth as {
+        extra?: { platformToken?: string; apiKey?: string };
+        clientId?: string;
+        scopes?: string[];
+      } | undefined;
+
+      const apiKey = auth?.extra?.apiKey as string | undefined;
+      const platformToken = (auth?.extra?.platformToken as string) || "";
+      const clientId = auth?.clientId || "unknown";
+      const scopes = auth?.scopes || [];
+
+      // Create per-request API client — API key or bearer token
+      const client = apiKey
+        ? new ElnoraApiClient(config, { apiKey })
+        : new ElnoraApiClient(config, platformToken);
+
       const getContext = () => ({ client, clientId, scopes });
       const server = createElnoraServer(config, getContext);
 
@@ -119,7 +257,10 @@ async function main(): Promise<void> {
         enableJsonResponse: true,
       });
 
-      res.on("close", () => transport.close());
+      res.on("close", () => {
+        transport.close().catch(() => {});
+        server.close().catch(() => {});
+      });
       await server.connect(transport);
       await transport.handleRequest(req, res, req.body);
     } catch (error) {
@@ -138,11 +279,23 @@ async function main(): Promise<void> {
     res.status(405).json({ error: "method_not_allowed", error_description: "Stateless server — sessions not supported" });
   });
 
-  app.listen(config.port, () => {
-    console.error(`Elnora MCP server running on http://localhost:${config.port}/mcp`);
+  const host = process.env.HOST || "127.0.0.1";
+  const httpServer = app.listen(config.port, host, () => {
+    console.error(`Elnora MCP server running on http://${host}:${config.port}/mcp`);
     console.error(`OAuth AS Metadata: ${config.publicUrl}/.well-known/oauth-authorization-server`);
     console.error(`Protected Resource Metadata: ${getOAuthProtectedResourceMetadataUrl(mcpServerUrl)}`);
+    console.error(`API Key auth: Send X-API-Key header with elnora_live_* key`);
     console.error(`Health check: http://localhost:${config.port}/health`);
+  });
+
+  // Handle server-level errors (port in use, etc.) — prevents unhandled crash
+  httpServer.on("error", (err: NodeJS.ErrnoException) => {
+    if (err.code === "EADDRINUSE") {
+      console.error(`Port ${config.port} is already in use`);
+    } else {
+      console.error("HTTP server error:", err);
+    }
+    process.exit(1);
   });
 }
 

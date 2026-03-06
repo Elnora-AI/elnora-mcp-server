@@ -11,12 +11,25 @@ import { CLIENT_SECRET_TTL_SECONDS } from "../constants.js";
 export class InMemoryClientsStore implements OAuthRegisteredClientsStore {
   private clients = new Map<string, OAuthClientInformationFull>();
 
+  constructor() {
+    // Periodically evict expired clients to prevent unbounded memory growth
+    setInterval(() => {
+      const now = Math.floor(Date.now() / 1000);
+      for (const [id, client] of this.clients) {
+        if (client.client_secret_expires_at && client.client_secret_expires_at < now) {
+          this.clients.delete(id);
+        }
+      }
+    }, CLIENT_SECRET_TTL_SECONDS * 1000 / 10).unref(); // Run ~every 9 days
+  }
+
   getClient(clientId: string): OAuthClientInformationFull | undefined {
     const client = this.clients.get(clientId);
     if (!client) return undefined;
 
-    // Check secret expiration (per SDK docs: don't delete, just check)
+    // Check secret expiration
     if (client.client_secret_expires_at && client.client_secret_expires_at < Math.floor(Date.now() / 1000)) {
+      this.clients.delete(clientId);
       return undefined;
     }
 

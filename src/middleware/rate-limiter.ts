@@ -1,4 +1,5 @@
 import { RequestHandler } from "express";
+import { logRateLimitEvent } from "./tool-logging.js";
 
 /**
  * Simple in-memory rate limiter for the /mcp endpoint.
@@ -46,7 +47,7 @@ export function mcpRateLimiter(opts?: { maxRequests?: number; windowMs?: number 
     if (record.count > maxRequests) {
       const retryAfter = Math.ceil((record.resetAt - now) / 1000);
       res.setHeader("Retry-After", retryAfter);
-      console.error(`[rate-limit] blocked ${key} (${record.count}/${maxRequests} in window)`);
+      logRateLimitEvent(key, record.count, maxRequests);
       res.status(429).json({
         error: "rate_limit_exceeded",
         error_description: `Too many requests. Retry after ${retryAfter} seconds.`,

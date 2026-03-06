@@ -13,7 +13,6 @@ import axios from "axios";
 
 const config: ElnoraConfig = {
   apiUrl: "https://api.example.com",
-  authUrl: "https://auth.example.com",
   tokenValidationUrl: "https://api.example.com/auth/validate-token",
   port: 3001,
   publicUrl: "https://mcp.example.com",
@@ -128,6 +127,46 @@ describe("ElnoraOAuthProvider", () => {
       await expect(provider.exchangeAuthorizationCode(client, "invalid")).rejects.toThrow(
         "Invalid or expired authorization code",
       );
+    });
+
+    it("throws when platform callback not completed", async () => {
+      const client = { client_id: "test-client", redirect_uris: ["http://localhost:3000/callback"] };
+      const params = {
+        codeChallenge: "challenge",
+        redirectUri: "http://localhost:3000/callback",
+      };
+      const redirectFn = vi.fn();
+      const res = { redirect: redirectFn } as never;
+
+      await provider.authorize(client, params, res);
+      const redirectUrl = new URL(redirectFn.mock.calls[0][0]);
+      const mcpCode = redirectUrl.searchParams.get("mcp_code")!;
+
+      // Do NOT call handlePlatformCallback — simulate missing platform auth
+      await expect(provider.exchangeAuthorizationCode(client, mcpCode)).rejects.toThrow(
+        "Platform authentication not completed",
+      );
+    });
+
+    it("throws when redirect_uri does not match authorization request", async () => {
+      const client = { client_id: "test-client", redirect_uris: ["http://localhost:3000/callback"] };
+      const params = {
+        codeChallenge: "challenge",
+        redirectUri: "http://localhost:3000/callback",
+        scopes: ["tasks:read"],
+      };
+      const redirectFn = vi.fn();
+      const res = { redirect: redirectFn } as never;
+
+      await provider.authorize(client, params, res);
+      const redirectUrl = new URL(redirectFn.mock.calls[0][0]);
+      const mcpCode = redirectUrl.searchParams.get("mcp_code")!;
+
+      provider.handlePlatformCallback(mcpCode, "platform-auth-code");
+
+      await expect(
+        provider.exchangeAuthorizationCode(client, mcpCode, undefined, "http://evil.example.com/callback"),
+      ).rejects.toThrow("redirect_uri does not match the authorization request");
     });
 
     it("throws when client_id doesn't match", async () => {

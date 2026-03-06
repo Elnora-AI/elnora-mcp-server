@@ -14,24 +14,23 @@ export function registerTaskTools(
     "elnora_create_task",
     {
       title: "Create Task",
-      description:
-        "Create a new task (conversation) in Elnora. Tasks are the primary unit of interaction — each task is a chat thread where you can send messages and receive AI agent responses.",
+      description: "Create a new task (conversation thread). Each task is a chat where you send messages and receive AI responses.",
       inputSchema: {
-        title: z.string().max(200).optional().describe("Task title (e.g., 'HEK 293 protocol generation')"),
+        project_id: z.string().uuid().optional().describe("Project UUID (optional)"),
+        title: z.string().max(200).optional().describe("Task title"),
+        initial_message: z.string().max(50_000).optional().describe("Initial message to send"),
+        context_file_ids: z.array(z.string().uuid()).optional().describe("File IDs for context"),
       },
-      annotations: {
-        readOnlyHint: false,
-        destructiveHint: false,
-        idempotentHint: false,
-        openWorldHint: true,
-      },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
-    withGuard("elnora_create_task", getContext, async ({ title }) => {
+    withGuard("elnora_create_task", getContext, async ({ project_id, title, initial_message, context_file_ids }) => {
       try {
-        const task = await getClient().createTask(title);
-        return {
-          content: [{ type: "text" as const, text: JSON.stringify(task, null, 2) }],
-        };
+        const body: Record<string, unknown> = { title: title || "New Task" };
+        if (project_id) body.projectId = project_id;
+        if (initial_message) body.initialMessage = initial_message;
+        if (context_file_ids) body.contextFileIds = context_file_ids;
+        const result = await getClient().post("/tasks", body);
+        return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
       }
@@ -42,21 +41,40 @@ export function registerTaskTools(
     "elnora_list_tasks",
     {
       title: "List Tasks",
-      description:
-        "List tasks in your Elnora workspace. Returns task summaries with status and timestamps.",
+      description: "List tasks. Optionally filter by project or status.",
       inputSchema: {
-        status: z.string().optional().describe("Filter by task status"),
-        limit: z.number().int().min(1).max(100).default(20).describe("Max results"),
-        offset: z.number().int().min(0).default(0).describe("Pagination offset"),
+        project_id: z.string().uuid().optional().describe("Filter by project UUID"),
+        status: z.string().optional().describe("Filter by status"),
+        page: z.number().int().min(1).default(1).describe("Page number"),
+        page_size: z.number().int().min(1).max(100).default(25).describe("Results per page"),
       },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
-    withGuard("elnora_list_tasks", getContext, async ({ status, limit, offset }) => {
+    withGuard("elnora_list_tasks", getContext, async ({ project_id, status, page, page_size }) => {
       try {
-        const result = await getClient().listTasks(status, limit, offset);
-        return {
-          content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
-        };
+        const path = project_id ? `/projects/${project_id}/tasks` : "/tasks";
+        const result = await getClient().get(path, { page, pageSize: page_size, status });
+        return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
+      } catch (error) {
+        return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
+      }
+    }),
+  );
+
+  server.registerTool(
+    "elnora_get_task",
+    {
+      title: "Get Task",
+      description: "Get a single task by UUID.",
+      inputSchema: {
+        task_id: z.string().uuid().describe("Task UUID"),
+      },
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+    },
+    withGuard("elnora_get_task", getContext, async ({ task_id }) => {
+      try {
+        const result = await getClient().get(`/tasks/${task_id}`);
+        return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
       }
@@ -67,21 +85,62 @@ export function registerTaskTools(
     "elnora_get_task_messages",
     {
       title: "Get Task Messages",
-      description:
-        "Get the message history for a specific task. Returns user and assistant messages in chronological order.",
+      description: "Get message history for a task.",
       inputSchema: {
         task_id: z.string().uuid().describe("Task UUID"),
         limit: z.number().int().min(1).max(100).default(50).describe("Max messages"),
-        offset: z.number().int().min(0).default(0).describe("Pagination offset"),
+        cursor: z.string().optional().describe("Cursor for pagination"),
       },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
-    withGuard("elnora_get_task_messages", getContext, async ({ task_id, limit, offset }) => {
+    withGuard("elnora_get_task_messages", getContext, async ({ task_id, limit, cursor }) => {
       try {
-        const result = await getClient().getTaskMessages(task_id, limit, offset);
-        return {
-          content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
-        };
+        const params: Record<string, string | number | undefined> = { limit };
+        if (cursor) params.cursor = cursor;
+        const result = await getClient().get(`/tasks/${task_id}/messages`, params);
+        return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
+      } catch (error) {
+        return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
+      }
+    }),
+  );
+
+  server.registerTool(
+    "elnora_update_task",
+    {
+      title: "Update Task",
+      description: "Update task title or status.",
+      inputSchema: {
+        task_id: z.string().uuid().describe("Task UUID"),
+        title: z.string().max(200).optional().describe("New title"),
+        status: z.string().optional().describe("New status"),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+    },
+    withGuard("elnora_update_task", getContext, async ({ task_id, title, status }) => {
+      try {
+        const result = await getClient().put(`/tasks/${task_id}`, { title, status });
+        return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
+      } catch (error) {
+        return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
+      }
+    }),
+  );
+
+  server.registerTool(
+    "elnora_archive_task",
+    {
+      title: "Archive Task",
+      description: "Archive (delete) a task.",
+      inputSchema: {
+        task_id: z.string().uuid().describe("Task UUID"),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
+    },
+    withGuard("elnora_archive_task", getContext, async ({ task_id }) => {
+      try {
+        await getClient().del(`/tasks/${task_id}`);
+        return { content: [{ type: "text" as const, text: JSON.stringify({ archived: true, taskId: task_id }) }] };
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
       }

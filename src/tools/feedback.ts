@@ -5,27 +5,26 @@ import { RequestContext } from "../server.js";
 import { handleApiError } from "../services/error-handler.js";
 import { withGuard } from "./with-guard.js";
 
-export function registerMessageTools(
+export function registerFeedbackTools(
   server: McpServer,
   getClient: () => ElnoraApiClient,
   getContext: () => RequestContext,
 ): void {
   server.registerTool(
-    "elnora_send_message",
+    "elnora_submit_feedback",
     {
-      title: "Send Message",
-      description: "Send a message to a task and receive the AI response. May take 30-120s for complex requests.",
+      title: "Submit Feedback",
+      description: "Submit user feedback about the Elnora platform.",
       inputSchema: {
-        task_id: z.string().uuid().describe("Task UUID"),
-        message: z.string().min(1).max(50_000).describe("Message content (markdown supported)"),
-        file_ids: z.array(z.string().uuid()).optional().describe("File IDs to attach"),
+        title: z.string().min(1).max(200).describe("Feedback title"),
+        description: z.string().min(1).max(5000).describe("Detailed description"),
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
-    withGuard("elnora_send_message", getContext, async ({ task_id, message, file_ids }) => {
+    withGuard("elnora_submit_feedback", getContext, async ({ title, description }) => {
       try {
-        const response = await getClient().sendMessage(task_id, message, file_ids);
-        return { content: [{ type: "text" as const, text: JSON.stringify(response) }] };
+        const result = await getClient().post("/feedback", { title, description });
+        return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
       }
