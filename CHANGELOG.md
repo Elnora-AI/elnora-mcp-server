@@ -5,6 +5,13 @@ All notable changes to the Elnora MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.1](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v0.5.0...mcp-server-v0.5.1) (2026-03-06)
+
+
+### Bug Fixes
+
+* **ci:** extract semver from release-please component tags ([#21](https://github.com/Elnora-AI/elnora-mcp-server/issues/21)) ([9e47c13](https://github.com/Elnora-AI/elnora-mcp-server/commit/9e47c1398b225694beb3b911103069e2e3fba7f8))
+
 ## [0.5.0](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v0.4.2...mcp-server-v0.5.0) (2026-03-06)
 
 
