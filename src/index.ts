@@ -279,7 +279,7 @@ async function main(): Promise<void> {
     res.status(405).json({ error: "method_not_allowed", error_description: "Stateless server — sessions not supported" });
   });
 
-  const host = process.env.HOST || "127.0.0.1";
+  const host = process.env.HOST || "0.0.0.0";
   const httpServer = app.listen(config.port, host, () => {
     console.error(`Elnora MCP server running on http://${host}:${config.port}/mcp`);
     console.error(`OAuth AS Metadata: ${config.publicUrl}/.well-known/oauth-authorization-server`);
