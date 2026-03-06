@@ -5,6 +5,13 @@ All notable changes to the Elnora MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.4.2](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v0.4.1...mcp-server-v0.4.2) (2026-03-06)
+
+
+### Bug Fixes
+
+* use ipKeyGenerator to resolve express-rate-limit IPv6 warning ([#16](https://github.com/Elnora-AI/elnora-mcp-server/issues/16)) ([61778a4](https://github.com/Elnora-AI/elnora-mcp-server/commit/61778a4ddd2e5054b0b565651b6e5ef8422e3e0e))
+
 ## [0.4.1](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v0.4.0...mcp-server-v0.4.1) (2026-03-06)
 
 
