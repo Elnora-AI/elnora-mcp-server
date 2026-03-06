@@ -8,10 +8,9 @@ import { ElnoraOAuthProvider } from "./auth/provider.js";
 import { createElnoraServer } from "./server.js";
 import { corsMiddleware } from "./middleware/cors.js";
 import { mcpRateLimiter } from "./middleware/rate-limiter.js";
-import { SUPPORTED_SCOPES, ALL_SCOPES, API_KEY_PREFIX, API_KEY_MIN_LENGTH } from "./constants.js";
+import { SUPPORTED_SCOPES, ALL_SCOPES } from "./constants.js";
 import { logAuthEvent } from "./middleware/tool-logging.js";
 import axios from "axios";
-import crypto from "node:crypto";
 
 function requireEnv(name: string): string {
   const value = process.env[name];
@@ -35,11 +34,27 @@ function loadConfig(): ElnoraConfig {
 }
 
 /**
- * Validate API key format (matches elnora-cli validation).
- * Must start with "elnora_live_" and be at least 20 characters.
+ * Validate an API key against the Elnora platform.
+ * Returns the platform-assigned user identifier on success, or null on failure.
+ * The platform is the sole authority — no local format checks gate access.
  */
-function isValidApiKey(key: string): boolean {
-  return key.startsWith(API_KEY_PREFIX) && key.length >= API_KEY_MIN_LENGTH;
+async function validateApiKeyWithPlatform(
+  apiKey: string,
+  config: ElnoraConfig,
+): Promise<{ userId: string } | null> {
+  try {
+    const validation = await axios.post(
+      config.tokenValidationUrl,
+      {},
+      { headers: { Authorization: `Bearer ${apiKey}` }, timeout: 10_000 },
+    );
+    if (validation.data.valid && validation.data.user_id) {
+      return { userId: String(validation.data.user_id) };
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 async function main(): Promise<void> {
@@ -133,72 +148,51 @@ async function main(): Promise<void> {
   });
 
   /**
-   * API Key + OAuth dual auth middleware.
-   * Checks for X-API-Key header first. If present, validates against platform.
-   * Otherwise falls through to OAuth bearer token validation.
+   * Authenticate via API key (validated by platform) or OAuth bearer token.
+   * Both paths delegate the security decision to a trusted authority:
+   * - API key: validated by the Elnora platform's token validation endpoint
+   * - Bearer token: validated by the OAuth provider's verifyAccessToken
+   *
+   * The platform is the sole authority for API key validation — no local
+   * checks gate access. The platform returns a user_id which is used as
+   * the client identifier for audit logging (no local hashing of secrets).
    */
   async function dualAuthMiddleware(req: Request, res: Response, next: NextFunction): Promise<void> {
+    // Determine auth method from headers — both paths validate server-side
     const apiKey = req.headers["x-api-key"] as string | undefined;
 
-    if (apiKey) {
-      // API key auth path — format check first, then platform validation
-      if (!isValidApiKey(apiKey)) {
-        logAuthEvent("api_key_rejected", "unknown", { reason: "invalid_format" });
-        res.status(401).json({
-          error: "invalid_api_key",
-          error_description: "Invalid API key",
-        });
-        return;
-      }
-
-      // Validate API key against the platform (CoSAI MCP-T7: server-side validation)
-      try {
-        const validation = await axios.post(
-          config.tokenValidationUrl,
-          {},
-          { headers: { Authorization: `Bearer ${apiKey}` }, timeout: 10_000 },
-        );
-        if (!validation.data.valid) {
-          logAuthEvent("api_key_rejected", "unknown", { reason: "platform_rejected" });
-          res.status(401).json({
-            error: "invalid_api_key",
-            error_description: "API key rejected by platform",
-          });
-          return;
-        }
-      } catch (error) {
-        logAuthEvent("api_key_rejected", "unknown", { reason: "platform_validation_failed" });
-        res.status(401).json({
-          error: "invalid_api_key",
-          error_description: "Unable to validate API key",
-        });
-        return;
-      }
-
-      // Derive unique clientId via HMAC with server secret (not plain hash)
-      const keyHash = crypto
-        .createHmac("sha256", config.platformClientSecret)
-        .update(apiKey)
-        .digest("hex")
-        .slice(0, 12);
-      const apiKeyClientId = `apikey:${keyHash}`;
-
-      // Set auth context compatible with OAuth flow
-      // API key users get all scopes — platform enforces permissions
-      (req as unknown as Record<string, unknown>).auth = {
-        token: apiKey,
-        clientId: apiKeyClientId,
-        scopes: ALL_SCOPES,
-        extra: { apiKey },
-      };
-
-      logAuthEvent("api_key_authenticated", apiKeyClientId);
-      next();
+    // No API key header → standard OAuth bearer auth
+    if (!apiKey) {
+      oauthMiddleware(req, res, next);
       return;
     }
 
-    // Fall through to OAuth bearer auth
-    oauthMiddleware(req, res, next);
+    // API key present → validate against the platform (CoSAI MCP-T7)
+    const result = await validateApiKeyWithPlatform(apiKey, config);
+
+    if (!result) {
+      logAuthEvent("api_key_rejected", "unknown");
+      res.status(401).json({
+        error: "invalid_api_key",
+        error_description: "API key rejected by platform",
+      });
+      return;
+    }
+
+    // Use platform-assigned user ID as client identifier (no local hashing)
+    const apiKeyClientId = `apikey:${result.userId}`;
+
+    // Set auth context compatible with OAuth flow
+    // API key users get all scopes — platform enforces permissions
+    (req as unknown as Record<string, unknown>).auth = {
+      token: apiKey,
+      clientId: apiKeyClientId,
+      scopes: ALL_SCOPES,
+      extra: { apiKey },
+    };
+
+    logAuthEvent("api_key_authenticated", apiKeyClientId);
+    next();
   }
 
   // --- MCP Endpoint (protected by dual auth + rate limiting) ---

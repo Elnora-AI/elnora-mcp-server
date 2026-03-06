@@ -3,7 +3,7 @@ import { createElnoraServer, RequestContext } from "../../src/server.js";
 import { ElnoraApiClient } from "../../src/services/elnora-api-client.js";
 import { ElnoraConfig } from "../../src/types.js";
 import { TOOL_SCOPES } from "../../src/tools/scope-guard.js";
-import { ALL_SCOPES, API_KEY_PREFIX, API_KEY_MIN_LENGTH } from "../../src/constants.js";
+import { ALL_SCOPES } from "../../src/constants.js";
 
 const mockConfig: ElnoraConfig = {
   apiUrl: "https://platform.elnora.ai/api/v1",
@@ -62,24 +62,6 @@ describe("Tool Registration", () => {
     const getContext = () => createTestContext();
     const server = createElnoraServer(mockConfig, getContext);
     expect(server).toBeDefined();
-  });
-});
-
-describe("API Key Validation", () => {
-  it("accepts valid API keys", () => {
-    const key = "elnora_live_1234567890abcdef";
-    expect(key.startsWith(API_KEY_PREFIX)).toBe(true);
-    expect(key.length).toBeGreaterThanOrEqual(API_KEY_MIN_LENGTH);
-  });
-
-  it("rejects keys without correct prefix", () => {
-    const key = "invalid_key_1234567890";
-    expect(key.startsWith(API_KEY_PREFIX)).toBe(false);
-  });
-
-  it("rejects keys that are too short", () => {
-    const key = "elnora_live_abc";
-    expect(key.length).toBeLessThan(API_KEY_MIN_LENGTH);
   });
 });
 

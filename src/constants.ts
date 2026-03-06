@@ -8,10 +8,6 @@ export const REFRESH_TOKEN_TTL_SECONDS = 30 * 24 * 3600; // 30 days
 export const AUTH_CODE_TTL_SECONDS = 300; // 5 minutes
 export const CLIENT_SECRET_TTL_SECONDS = 90 * 24 * 3600; // 90 days
 
-// API key validation
-export const API_KEY_PREFIX = "elnora_live_";
-export const API_KEY_MIN_LENGTH = 20;
-
 // MCP scopes — all supported scopes for OAuth clients
 export const SUPPORTED_SCOPES = [
   "tasks:read",
