@@ -24,12 +24,18 @@ function createTestContext(): RequestContext {
 describe("Tool Registration", () => {
   it("registers all expected tools", () => {
     const getContext = () => createTestContext();
-    const server = createElnoraServer(mockConfig, getContext);
+    const server = createElnoraServer(getContext);
 
-    // Access internal tool registry — McpServer stores tools in a private map
-    // We verify by checking the scope guard has entries for all expected tools
+    // Access internal tool registry — McpServer stores tools in _registeredTools
+    const registeredTools = Object.keys(
+      (server as unknown as Record<string, Record<string, unknown>>)._registeredTools,
+    );
     const expectedTools = Object.keys(TOOL_SCOPES);
-    expect(expectedTools.length).toBeGreaterThanOrEqual(74);
+
+    expect(registeredTools.length).toBeGreaterThanOrEqual(expectedTools.length);
+    for (const toolName of expectedTools) {
+      expect(registeredTools, `Tool "${toolName}" not registered on server`).toContain(toolName);
+    }
   });
 
   it("has scope definitions for all tool groups", () => {
@@ -60,7 +66,7 @@ describe("Tool Registration", () => {
 
   it("server creates without errors", () => {
     const getContext = () => createTestContext();
-    const server = createElnoraServer(mockConfig, getContext);
+    const server = createElnoraServer(getContext);
     expect(server).toBeDefined();
   });
 });

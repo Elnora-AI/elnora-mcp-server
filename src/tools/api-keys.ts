@@ -55,7 +55,7 @@ export function registerApiKeyTools(
       title: "Revoke API Key",
       description: "Revoke (delete) an API key.",
       inputSchema: {
-        key_id: z.string().max(255).describe("API key ID"),
+        key_id: z.string().min(1).max(255).describe("API key ID"),
       },
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
     },

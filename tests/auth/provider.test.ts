@@ -5,7 +5,7 @@ import type { ElnoraConfig } from "../../src/types.js";
 vi.mock("axios", () => ({
   default: {
     post: vi.fn(),
-    isAxiosError: (e: unknown) => e instanceof Error && "response" in (e as Record<string, unknown>),
+    isAxiosError: (e: unknown) => e instanceof Error && "isAxiosError" in (e as Record<string, unknown>) && (e as Record<string, unknown>).isAxiosError === true,
   },
 }));
 
@@ -93,7 +93,10 @@ describe("ElnoraOAuthProvider", () => {
 
   describe("exchangeAuthorizationCode", () => {
     it("exchanges code for tokens via platform and issues MCP tokens", async () => {
-      const client = { client_id: "test-client", redirect_uris: ["http://localhost:3000/callback"] };
+      const registered = provider.clientsStore.registerClient({
+        redirect_uris: ["http://localhost:3000/callback"],
+      });
+      const client = { client_id: registered.client_id, redirect_uris: ["http://localhost:3000/callback"] };
       const params = {
         codeChallenge: "challenge",
         redirectUri: "http://localhost:3000/callback",
@@ -107,14 +110,15 @@ describe("ElnoraOAuthProvider", () => {
       const mcpCode = redirectUrl.searchParams.get("mcp_code")!;
 
       // Simulate platform callback
-      provider.handlePlatformCallback(mcpCode, "platform-auth-code");
+      const platformState = redirectUrl.searchParams.get("state")!;
+      provider.handlePlatformCallback(mcpCode, "platform-auth-code", platformState);
 
       // Mock platform token exchange
       vi.mocked(axios.post).mockResolvedValueOnce({
         data: { access_token: "platform-token-123" },
       });
 
-      const tokens = await provider.exchangeAuthorizationCode(client, mcpCode);
+      const tokens = await provider.exchangeAuthorizationCode(client, mcpCode, undefined, "http://localhost:3000/callback");
 
       expect(tokens.access_token).toBeDefined();
       expect(tokens.refresh_token).toBeDefined();
@@ -130,7 +134,10 @@ describe("ElnoraOAuthProvider", () => {
     });
 
     it("throws when platform callback not completed", async () => {
-      const client = { client_id: "test-client", redirect_uris: ["http://localhost:3000/callback"] };
+      const registered = provider.clientsStore.registerClient({
+        redirect_uris: ["http://localhost:3000/callback"],
+      });
+      const client = { client_id: registered.client_id, redirect_uris: ["http://localhost:3000/callback"] };
       const params = {
         codeChallenge: "challenge",
         redirectUri: "http://localhost:3000/callback",
@@ -143,13 +150,16 @@ describe("ElnoraOAuthProvider", () => {
       const mcpCode = redirectUrl.searchParams.get("mcp_code")!;
 
       // Do NOT call handlePlatformCallback — simulate missing platform auth
-      await expect(provider.exchangeAuthorizationCode(client, mcpCode)).rejects.toThrow(
+      await expect(provider.exchangeAuthorizationCode(client, mcpCode, undefined, "http://localhost:3000/callback")).rejects.toThrow(
         "Platform authentication not completed",
       );
     });
 
     it("throws when redirect_uri does not match authorization request", async () => {
-      const client = { client_id: "test-client", redirect_uris: ["http://localhost:3000/callback"] };
+      const registered = provider.clientsStore.registerClient({
+        redirect_uris: ["http://localhost:3000/callback"],
+      });
+      const client = { client_id: registered.client_id, redirect_uris: ["http://localhost:3000/callback"] };
       const params = {
         codeChallenge: "challenge",
         redirectUri: "http://localhost:3000/callback",
@@ -162,7 +172,8 @@ describe("ElnoraOAuthProvider", () => {
       const redirectUrl = new URL(redirectFn.mock.calls[0][0]);
       const mcpCode = redirectUrl.searchParams.get("mcp_code")!;
 
-      provider.handlePlatformCallback(mcpCode, "platform-auth-code");
+      const platformState2 = redirectUrl.searchParams.get("state")!;
+      provider.handlePlatformCallback(mcpCode, "platform-auth-code", platformState2);
 
       await expect(
         provider.exchangeAuthorizationCode(client, mcpCode, undefined, "http://evil.example.com/callback"),
@@ -204,17 +215,44 @@ describe("ElnoraOAuthProvider", () => {
     });
   });
 
-  describe("handlePlatformCallback", () => {
-    it("throws for invalid mcp_code", () => {
-      expect(() => provider.handlePlatformCallback("invalid", "platform-code")).toThrow(
-        "Invalid or expired MCP authorization code",
+  describe("authorize — edge cases", () => {
+    it("rejects when codeChallenge is missing (PKCE mandatory)", async () => {
+      const client = { client_id: "test-client", redirect_uris: ["http://localhost:3000/callback"] };
+      const params = { redirectUri: "http://localhost:3000/callback", scopes: ["tasks:read"] };
+      const res = { redirect: vi.fn() } as never;
+
+      await expect(provider.authorize(client, params as never, res)).rejects.toThrow(
+        "PKCE code_challenge is required",
+      );
+    });
+
+    it("rejects unsupported scopes", async () => {
+      const client = { client_id: "test-client", redirect_uris: ["http://localhost:3000/callback"] };
+      const params = {
+        codeChallenge: "challenge",
+        redirectUri: "http://localhost:3000/callback",
+        scopes: ["tasks:read", "evil:scope"],
+      };
+      const res = { redirect: vi.fn() } as never;
+
+      await expect(provider.authorize(client, params, res)).rejects.toThrow(
+        "Unsupported scopes requested: evil:scope",
       );
     });
   });
 
-  describe("getClientRedirectUrl", () => {
-    it("builds redirect URL with code and state", async () => {
-      const client = { client_id: "test-client", redirect_uris: ["http://localhost:3000/callback"] };
+  describe("handlePlatformCallback", () => {
+    it("throws for invalid mcp_code", () => {
+      expect(() => provider.handlePlatformCallback("invalid", "platform-code", "some-state")).toThrow(
+        "Invalid or expired MCP authorization code",
+      );
+    });
+
+    it("throws on state mismatch (CSRF protection)", async () => {
+      const registered = provider.clientsStore.registerClient({
+        redirect_uris: ["http://localhost:3000/callback"],
+      });
+      const client = { client_id: registered.client_id, redirect_uris: ["http://localhost:3000/callback"] };
       const params = {
         codeChallenge: "challenge",
         redirectUri: "http://localhost:3000/callback",
@@ -227,8 +265,52 @@ describe("ElnoraOAuthProvider", () => {
       const loginUrl = new URL(redirectFn.mock.calls[0][0]);
       const mcpCode = loginUrl.searchParams.get("mcp_code")!;
 
-      provider.handlePlatformCallback(mcpCode, "platform-code");
-      const redirectUrl = provider.getClientRedirectUrl(mcpCode);
+      expect(() => provider.handlePlatformCallback(mcpCode, "platform-code", "wrong-state")).toThrow(
+        "State parameter mismatch",
+      );
+    });
+
+    it("throws on empty platform code", async () => {
+      const registered = provider.clientsStore.registerClient({
+        redirect_uris: ["http://localhost:3000/callback"],
+      });
+      const client = { client_id: registered.client_id, redirect_uris: ["http://localhost:3000/callback"] };
+      const params = {
+        codeChallenge: "challenge",
+        redirectUri: "http://localhost:3000/callback",
+      };
+      const redirectFn = vi.fn();
+      const res = { redirect: redirectFn } as never;
+
+      await provider.authorize(client, params, res);
+      const loginUrl = new URL(redirectFn.mock.calls[0][0]);
+      const mcpCode = loginUrl.searchParams.get("mcp_code")!;
+      const platformState = loginUrl.searchParams.get("state")!;
+
+      expect(() => provider.handlePlatformCallback(mcpCode, "", platformState)).toThrow(
+        "Platform authorization code is empty",
+      );
+    });
+
+    it("builds redirect URL with code and state", async () => {
+      const registered = provider.clientsStore.registerClient({
+        redirect_uris: ["http://localhost:3000/callback"],
+      });
+      const client = { client_id: registered.client_id, redirect_uris: ["http://localhost:3000/callback"] };
+      const params = {
+        codeChallenge: "challenge",
+        redirectUri: "http://localhost:3000/callback",
+        state: "my-state",
+      };
+      const redirectFn = vi.fn();
+      const res = { redirect: redirectFn } as never;
+
+      await provider.authorize(client, params, res);
+      const loginUrl = new URL(redirectFn.mock.calls[0][0]);
+      const mcpCode = loginUrl.searchParams.get("mcp_code")!;
+      const platformState = loginUrl.searchParams.get("state")!;
+
+      const redirectUrl = provider.handlePlatformCallback(mcpCode, "platform-code", platformState);
       const parsed = new URL(redirectUrl);
 
       expect(parsed.origin).toBe("http://localhost:3000");

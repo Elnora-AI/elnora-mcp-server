@@ -17,6 +17,7 @@ import {
   REFRESH_TOKEN_TTL_SECONDS,
   AUTH_CODE_TTL_SECONDS,
   REQUEST_TIMEOUT_MS,
+  SUPPORTED_SCOPES,
 } from "../constants.js";
 
 /**
@@ -65,14 +66,31 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
   async authorize(client: OAuthClientInformationFull, params: AuthorizationParams, res: Response): Promise<void> {
     const authCode = crypto.randomBytes(32).toString("base64url");
 
+    // PKCE is mandatory — reject if code_challenge is missing (CoSAI MCP-T1)
+    if (!params.codeChallenge) {
+      throw new Error("PKCE code_challenge is required");
+    }
+
+    // Generate a random state token for the platform callback (CSRF protection)
+    const platformState = crypto.randomBytes(16).toString("base64url");
+
+    // Validate requested scopes against supported scopes — reject unsupported scopes early
+    const requestedScopes = params.scopes || [];
+    const supportedSet = new Set<string>(SUPPORTED_SCOPES);
+    const unsupported = requestedScopes.filter((s) => !supportedSet.has(s));
+    if (unsupported.length > 0) {
+      throw new Error(`Unsupported scopes requested: ${unsupported.join(", ")}`);
+    }
+
     // Store session for later exchange
     this.authSessions.set(authCode, {
       clientId: client.client_id,
       codeChallenge: params.codeChallenge,
       redirectUri: params.redirectUri,
-      scopes: params.scopes || [],
+      scopes: requestedScopes,
       state: params.state,
       resource: params.resource?.toString(),
+      platformState,
       createdAt: Date.now(),
     });
 
@@ -84,6 +102,7 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
     loginUrl.searchParams.set("mcp_code", authCode);
     loginUrl.searchParams.set("redirect_uri", `${this.config.publicUrl}/oauth/callback`);
     loginUrl.searchParams.set("client_id", this.config.platformClientId);
+    loginUrl.searchParams.set("state", platformState);
 
     logAuthEvent("authorize_redirect", client.client_id);
     res.redirect(loginUrl.toString());
@@ -113,23 +132,27 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
     }
 
     if (session.clientId !== client.client_id) {
+      this.authSessions.delete(authorizationCode);
       throw new Error("Authorization code was not issued to this client");
     }
 
     // Validate redirect_uri matches the one from the authorization request (RFC 6749 §4.1.3)
-    if (redirectUri && redirectUri !== session.redirectUri) {
-      logAuthEvent("redirect_uri_mismatch", client.client_id);
-      throw new Error("redirect_uri does not match the authorization request");
+    // When redirect_uri was included in the authorization request, it MUST be included
+    // in the token request and MUST match exactly.
+    if (session.redirectUri) {
+      if (!redirectUri || redirectUri !== session.redirectUri) {
+        logAuthEvent("redirect_uri_mismatch", client.client_id);
+        throw new Error("redirect_uri does not match the authorization request");
+      }
     }
-
-    // Delete the auth code — single use only
-    this.authSessions.delete(authorizationCode);
 
     if (!session.platformCode) {
       throw new Error("Platform authentication not completed — user must authenticate on the platform first");
     }
 
-    // Exchange with Elnora platform for a platform token
+    // Exchange with Elnora platform for a platform token BEFORE deleting the session.
+    // If the platform exchange fails transiently, the session survives so the user
+    // can retry without restarting the full auth flow.
     let platformToken: string;
     try {
       const response = await axios.post<{ access_token: string }>(
@@ -147,6 +170,9 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
       logAuthEvent("platform_token_exchange_failed", client.client_id, { error: String(error) });
       throw new Error("Failed to exchange authorization code with platform");
     }
+
+    // Auth code is single-use per RFC 6749 — delete after exchange succeeds
+    this.authSessions.delete(authorizationCode);
 
     // Issue MCP tokens (separate from platform token — CoSAI MCP-T1)
     return this.issueTokens(client.client_id, session.scopes, platformToken, resource?.toString());
@@ -169,11 +195,44 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
     }
 
     // Validate scope subset constraint (OAuth 2.1: refresh MUST NOT escalate scopes)
-    if (scopes && scopes.length > 0) {
+    if (scopes !== undefined) {
+      if (scopes.length === 0) {
+        throw new Error("Scopes array must not be empty — omit the field to keep original scopes");
+      }
       const escalated = scopes.filter((s) => !record.scopes.includes(s));
       if (escalated.length > 0) {
         throw new Error(`Scope escalation not allowed. Requested scopes not in original grant: ${escalated.join(", ")}`);
       }
+    }
+
+    // Re-validate platform token before issuing new tokens — ensures revoked
+    // platform sessions don't survive through refresh (CoSAI MCP-T7)
+    try {
+      const validation = await axios.post(
+        this.config.tokenValidationUrl,
+        { token: record.platformToken },
+        { timeout: REQUEST_TIMEOUT_MS },
+      );
+      if (!validation.data.valid) {
+        this.tokenRecords.delete(accessTokenKey);
+        this.refreshTokenIndex.delete(refreshToken);
+        this.validationCache.delete(accessTokenKey);
+        logAuthEvent("refresh_platform_token_revoked", client.client_id);
+        throw new Error("Underlying platform token has been revoked");
+      }
+    } catch (error) {
+      if (error instanceof Error && error.message === "Underlying platform token has been revoked") {
+        throw error;
+      }
+      if (axios.isAxiosError(error) && error.response?.status === 401) {
+        this.tokenRecords.delete(accessTokenKey);
+        this.refreshTokenIndex.delete(refreshToken);
+        this.validationCache.delete(accessTokenKey);
+        logAuthEvent("refresh_platform_token_revoked", client.client_id);
+        throw new Error("Underlying platform token has been revoked");
+      }
+      logAuthEvent("refresh_platform_validation_error", client.client_id, { error: String(error) });
+      throw new Error("Platform token validation unavailable — please retry");
     }
 
     // Rotate: delete old tokens
@@ -186,7 +245,7 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
       requestedScopes: scopes || record.scopes,
     });
 
-    // Issue new tokens with the same platform token
+    // Issue new tokens with the validated platform token
     return this.issueTokens(
       client.client_id,
       scopes || record.scopes,
@@ -204,6 +263,7 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
     if (record.expiresAt < Math.floor(Date.now() / 1000)) {
       this.tokenRecords.delete(token);
       this.validationCache.delete(token);
+      this.refreshTokenIndex.delete(record.refreshToken);
       throw new Error("Access token expired");
     }
 
@@ -217,7 +277,6 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
         scopes: record.scopes,
         expiresAt: record.expiresAt,
         resource: record.resource ? new URL(record.resource) : undefined,
-        extra: { platformToken: record.platformToken },
       };
     }
 
@@ -231,6 +290,7 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
       if (!validation.data.valid) {
         this.tokenRecords.delete(token);
         this.validationCache.delete(token);
+        this.refreshTokenIndex.delete(record.refreshToken);
         throw new Error("Underlying platform token revoked");
       }
       // Cache successful validation
@@ -243,10 +303,13 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
       if (axios.isAxiosError(error) && error.response?.status === 401) {
         this.tokenRecords.delete(token);
         this.validationCache.delete(token);
+        this.refreshTokenIndex.delete(record.refreshToken);
         throw new Error("Underlying platform token revoked");
       }
-      // Network errors — don't invalidate, just log
+      // Network errors — fail-closed for security (SOC 2 / pharma revocation requirements).
+      // Reject the request and force retry on next call.
       logAuthEvent("platform_validation_network_error", record.clientId, { error: String(error) });
+      throw new Error("Platform token validation unavailable — please retry");
     }
 
     return {
@@ -255,8 +318,16 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
       scopes: record.scopes,
       expiresAt: record.expiresAt,
       resource: record.resource ? new URL(record.resource) : undefined,
-      extra: { platformToken: record.platformToken },
     };
+  }
+
+  /**
+   * Retrieve the platform token for a validated MCP access token.
+   * Used by index.ts to construct the API client — keeps platform tokens
+   * out of AuthInfo.extra (CoSAI MCP-T1: no token passthrough).
+   */
+  getPlatformToken(accessToken: string): string | undefined {
+    return this.tokenRecords.get(accessToken)?.platformToken;
   }
 
   async revokeToken(
@@ -289,30 +360,46 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
   }
 
   /**
-   * Handle the callback from the Elnora platform login.
-   * Called by the /oauth/callback route after the user authenticates.
+   * Handle the callback from the Elnora platform login and return the
+   * client redirect URL atomically (single session lookup, no race window).
+   * Verifies platformState to prevent CSRF / code substitution attacks.
    */
-  handlePlatformCallback(mcpCode: string, platformCode: string): void {
+  handlePlatformCallback(mcpCode: string, platformCode: string, platformState: string): string {
     const session = this.authSessions.get(mcpCode);
     if (!session) {
       throw new Error("Invalid or expired MCP authorization code");
+    }
+
+    // Verify state parameter matches what we sent to prevent CSRF (CoSAI MCP-T7)
+    if (!platformState || platformState !== session.platformState) {
+      logAuthEvent("platform_callback_state_mismatch", session.clientId);
+      throw new Error("State parameter mismatch — possible CSRF attack");
+    }
+
+    // Prevent callback replay — each callback can only be processed once
+    // Use strict undefined check: empty string is also invalid (defense-in-depth)
+    if (session.platformCode !== undefined) {
+      throw new Error("Authorization callback already processed");
+    }
+
+    // Validate platformCode is non-empty
+    if (!platformCode) {
+      throw new Error("Platform authorization code is empty");
     }
 
     // Store the platform code for later exchange
     session.platformCode = platformCode;
 
     logAuthEvent("platform_callback_completed", session.clientId);
-  }
 
-  /**
-   * Get redirect URL for MCP client after platform callback.
-   */
-  getClientRedirectUrl(mcpCode: string): string {
-    const session = this.authSessions.get(mcpCode);
-    if (!session) {
-      throw new Error("Invalid or expired MCP authorization code");
+    // Validate redirect_uri against registered client before redirecting (prevents open redirect)
+    const clientRecord = this._clientsStore.getClient(session.clientId);
+    if (!clientRecord?.redirect_uris?.includes(session.redirectUri)) {
+      logAuthEvent("redirect_uri_not_registered", session.clientId, { redirectUri: session.redirectUri });
+      throw new Error("Redirect URI not registered for client");
     }
 
+    // Build redirect URL in the same call — no second lookup needed
     const redirectUrl = new URL(session.redirectUri);
     redirectUrl.searchParams.set("code", mcpCode);
     if (session.state) {
@@ -345,13 +432,23 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
     this.tokenRecords.set(accessToken, record);
     this.refreshTokenIndex.set(refreshToken, accessToken);
 
-    // Schedule cleanup of expired tokens (cap at ~24 days to stay within 32-bit setTimeout limit)
-    const cleanupMs = Math.min(REFRESH_TOKEN_TTL_SECONDS * 1000, 2_000_000_000);
-    setTimeout(() => {
+    // Schedule cleanup of expired tokens.
+    // 30-day TTL (2,592,000,000 ms) exceeds the 32-bit setTimeout limit (~24.8 days).
+    // Chain two timers: first fires at the safe max, second fires for the remainder.
+    const totalMs = REFRESH_TOKEN_TTL_SECONDS * 1000;
+    const MAX_TIMEOUT = 2_147_483_647; // 2^31 - 1
+    const cleanup = () => {
       this.tokenRecords.delete(accessToken);
       this.refreshTokenIndex.delete(refreshToken);
       this.validationCache.delete(accessToken);
-    }, cleanupMs).unref();
+    };
+    if (totalMs <= MAX_TIMEOUT) {
+      setTimeout(cleanup, totalMs).unref();
+    } else {
+      setTimeout(() => {
+        setTimeout(cleanup, totalMs - MAX_TIMEOUT).unref();
+      }, MAX_TIMEOUT).unref();
+    }
 
     logAuthEvent("tokens_issued", clientId, { expiresAt: new Date((now + ACCESS_TOKEN_TTL_SECONDS) * 1000).toISOString() });
 

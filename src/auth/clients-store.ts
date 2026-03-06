@@ -24,21 +24,33 @@ export class InMemoryClientsStore implements OAuthRegisteredClientsStore {
   }
 
   getClient(clientId: string): OAuthClientInformationFull | undefined {
-    const client = this.clients.get(clientId);
-    if (!client) return undefined;
-
-    // Check secret expiration
-    if (client.client_secret_expires_at && client.client_secret_expires_at < Math.floor(Date.now() / 1000)) {
-      this.clients.delete(clientId);
-      return undefined;
-    }
-
-    return client;
+    // Return the client even if expired — the SDK's auth middleware checks
+    // client_secret_expires_at itself and returns the correct RFC 7592 error.
+    // Per SDK docs: "implementations should NOT delete expired client secrets in-place."
+    return this.clients.get(clientId);
   }
 
   registerClient(
     client: Omit<OAuthClientInformationFull, "client_id" | "client_id_issued_at">,
   ): OAuthClientInformationFull {
+    // Validate redirect_uri schemes — HTTPS required, HTTP only for localhost (CoSAI MCP-T7)
+    if (client.redirect_uris) {
+      for (const uri of client.redirect_uris) {
+        let parsed: URL;
+        try {
+          parsed = new URL(uri);
+        } catch {
+          throw new Error(`Invalid redirect_uri: ${uri}`);
+        }
+        if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+          throw new Error(`redirect_uri must use HTTPS (got ${parsed.protocol}): ${uri}`);
+        }
+        if (parsed.protocol === "http:" && !["localhost", "127.0.0.1"].includes(parsed.hostname)) {
+          throw new Error(`HTTP redirect_uri only allowed for localhost: ${uri}`);
+        }
+      }
+    }
+
     const clientId = crypto.randomUUID();
     const clientSecret = crypto.randomBytes(32).toString("base64url");
     const now = Math.floor(Date.now() / 1000);

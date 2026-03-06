@@ -17,11 +17,23 @@ export function corsMiddleware(config: ElnoraConfig): RequestHandler {
   if (platformOrigin) allowedOrigins.add(platformOrigin);
 
   // Allow configuring additional origins via env var (comma-separated)
+  // Each value is parsed as a URL and normalized to its origin (scheme + host)
   const extraOrigins = process.env.CORS_ALLOWED_ORIGINS;
   if (extraOrigins) {
     for (const origin of extraOrigins.split(",")) {
       const trimmed = origin.trim();
-      if (trimmed) allowedOrigins.add(trimmed);
+      if (trimmed) {
+        try {
+          const parsed = new URL(trimmed);
+          if (parsed.protocol !== "https:" && !["localhost", "127.0.0.1"].includes(parsed.hostname)) {
+            console.error(`CORS_ALLOWED_ORIGINS: ignoring non-HTTPS origin "${trimmed}"`);
+            continue;
+          }
+          allowedOrigins.add(parsed.origin);
+        } catch {
+          console.error(`CORS_ALLOWED_ORIGINS: ignoring invalid origin "${trimmed}"`);
+        }
+      }
     }
   }
 
@@ -31,15 +43,18 @@ export function corsMiddleware(config: ElnoraConfig): RequestHandler {
     if (origin && allowedOrigins.has(origin)) {
       res.setHeader("Access-Control-Allow-Origin", origin);
       res.setHeader("Vary", "Origin");
+      res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+      res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-API-Key, MCP-Protocol-Version");
+      res.setHeader("Access-Control-Max-Age", "86400");
+      // Never expose tokens or auth headers to browsers
+      res.setHeader("Access-Control-Expose-Headers", "WWW-Authenticate");
     }
 
-    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-API-Key, MCP-Protocol-Version");
-    res.setHeader("Access-Control-Max-Age", "86400");
-    // Never expose tokens or auth headers to browsers
-    res.setHeader("Access-Control-Expose-Headers", "WWW-Authenticate");
-
     if (req.method === "OPTIONS") {
+      if (origin && !allowedOrigins.has(origin)) {
+        res.status(403).end();
+        return;
+      }
       res.status(204).end();
       return;
     }

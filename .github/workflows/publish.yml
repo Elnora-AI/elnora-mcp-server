@@ -5,6 +5,7 @@ on:
     types: [published]
 
 permissions:
+  contents: read
   id-token: write
 
 jobs:
@@ -12,7 +13,7 @@ jobs:
     name: Build, Test, and Publish
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22

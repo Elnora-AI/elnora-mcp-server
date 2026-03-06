@@ -1,7 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { createRequire } from "node:module";
 import type { ElnoraApiClient } from "./services/elnora-api-client.js";
-import type { ElnoraConfig } from "./types.js";
 import { registerTaskTools } from "./tools/tasks.js";
 import { registerMessageTools } from "./tools/messages.js";
 import { registerFileTools } from "./tools/files.js";
@@ -29,7 +28,6 @@ export interface RequestContext {
 }
 
 export function createElnoraServer(
-  config: ElnoraConfig,
   getContext: () => RequestContext,
 ): McpServer {
   const server = new McpServer({

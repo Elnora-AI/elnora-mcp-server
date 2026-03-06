@@ -34,4 +34,5 @@ export const SUPPORTED_SCOPES = [
 ] as const;
 
 // All scopes — used for API key auth (API keys get full access)
-export const ALL_SCOPES = [...SUPPORTED_SCOPES] as string[];
+export type SupportedScope = (typeof SUPPORTED_SCOPES)[number];
+export const ALL_SCOPES: SupportedScope[] = [...SUPPORTED_SCOPES];

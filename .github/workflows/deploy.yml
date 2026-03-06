@@ -5,6 +5,9 @@ on:
     types: [published]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 env:
   AWS_REGION: ${{ secrets.AWS_REGION }}
   AWS_ECR_REGISTRY: ${{ secrets.AWS_ECR_REGISTRY }}
@@ -18,12 +21,24 @@ jobs:
       RELEASE_TAG: ${{ github.event.release.tag_name }}
       EVENT_NAME: ${{ github.event_name }}
     steps:
-      - uses: actions/checkout@v6
-      - uses: aws-actions/configure-aws-credentials@v5
+      - uses: actions/checkout@v4
+      - name: Guard manual dispatch to main branch
+        if: github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/main'
+        run: |
+          echo "::error::Manual deploy is only allowed from the main branch"
+          exit 1
+      - uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
       - uses: aws-actions/amazon-ecr-login@v2
       - name: Resolve image tag
         id: tag
@@ -31,16 +46,25 @@ jobs:
           if [ "$EVENT_NAME" = "release" ]; then
             echo "version=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
           else
-            echo "version=latest" >> "$GITHUB_OUTPUT"
+            echo "version=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Validate image tag
+        run: |
+          if [ -z "${{ steps.tag.outputs.version }}" ]; then
+            echo "::error::Image tag is empty — aborting deploy"
+            exit 1
           fi
       - name: Build and push Docker image
         env:
           IMAGE_TAG: ${{ steps.tag.outputs.version }}
         run: |
           IMAGE="$AWS_ECR_REGISTRY/elnora-mcp-server"
-          docker build -t "$IMAGE:$IMAGE_TAG" -t "$IMAGE:latest" .
+          docker build -t "$IMAGE:$IMAGE_TAG" .
           docker push "$IMAGE:$IMAGE_TAG"
-          docker push "$IMAGE:latest"
+          if [ "$EVENT_NAME" = "release" ]; then
+            docker tag "$IMAGE:$IMAGE_TAG" "$IMAGE:latest"
+            docker push "$IMAGE:latest"
+          fi
       - name: Update ECS service
         run: |
           export AWS_PAGER=""

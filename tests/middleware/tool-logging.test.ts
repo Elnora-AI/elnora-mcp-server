@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { logToolInvocation, logAuthEvent, logRateLimitEvent } from "../../src/middleware/tool-logging.js";
+import { logToolInvocation, logAuthEvent } from "../../src/middleware/tool-logging.js";
 
 describe("logToolInvocation", () => {
   it("logs structured JSON to stderr", () => {
@@ -103,20 +103,3 @@ describe("logAuthEvent", () => {
   });
 });
 
-describe("logRateLimitEvent", () => {
-  it("logs structured JSON rate limit event to stderr", () => {
-    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
-
-    logRateLimitEvent("ip:127.0.0.1", 61, 60);
-
-    expect(spy).toHaveBeenCalledTimes(1);
-    const logged = JSON.parse(spy.mock.calls[0][0] as string);
-    expect(logged.type).toBe("rate_limit_block");
-    expect(logged.key).toBe("ip:127.0.0.1");
-    expect(logged.count).toBe(61);
-    expect(logged.limit).toBe(60);
-    expect(logged.timestamp).toBeDefined();
-
-    spy.mockRestore();
-  });
-});

@@ -14,7 +14,7 @@ export function registerFlagTools(
     "elnora_list_flags",
     {
       title: "List Feature Flags",
-      description: "List all global feature flags (public, no auth required).",
+      description: "List all global feature flags (no specific scope required).",
       inputSchema: {},
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
@@ -32,9 +32,9 @@ export function registerFlagTools(
     "elnora_get_flag",
     {
       title: "Get Feature Flag",
-      description: "Get a single feature flag by key (public, no auth required).",
+      description: "Get a single feature flag by key (no specific scope required).",
       inputSchema: {
-        key: z.string().min(1).max(200).regex(/^[\w.-]+$/).describe("Feature flag key"),
+        key: z.string().min(1).max(200).regex(/^[\w-]+(?:\.[\w-]+)*$/).describe("Feature flag key"),
       },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },

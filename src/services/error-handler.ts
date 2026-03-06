@@ -4,7 +4,7 @@ export function handleApiError(error: unknown): string {
   if (axios.isAxiosError(error)) {
     if (error.response) {
       const status = error.response.status;
-      const data = error.response.data as { errorCode?: string; messages?: string[] } | undefined;
+      const data = error.response.data as { messages?: string[] } | undefined;
       const messages = data?.messages?.join(", ") || "";
 
       switch (status) {
@@ -25,6 +25,8 @@ export function handleApiError(error: unknown): string {
       return "Error: Request timed out. The operation may still be in progress.";
     } else if (error.code === "ECONNREFUSED") {
       return "Error: Service temporarily unavailable. Please try again later.";
+    } else if (error.code === "ECONNRESET") {
+      return "Error: Connection was reset. The server may have dropped the connection — try again.";
     }
   }
   return `Error: Unexpected error: ${error instanceof Error ? error.message : String(error)}`;

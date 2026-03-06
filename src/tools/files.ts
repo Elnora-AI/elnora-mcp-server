@@ -178,7 +178,13 @@ export function registerFileTools(
     },
     withGuard("elnora_update_file", getContext, async ({ file_id, name, folder_id }) => {
       try {
-        const result = await getClient().put(`/files/${file_id}`, { name, folderId: folder_id });
+        const body: Record<string, string> = {};
+        if (name !== undefined) body.name = name;
+        if (folder_id !== undefined) body.folderId = folder_id;
+        if (Object.keys(body).length === 0) {
+          return { content: [{ type: "text" as const, text: "Error: At least one field (name or folder_id) must be provided." }], isError: true };
+        }
+        const result = await getClient().put(`/files/${file_id}`, body);
         return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
@@ -233,7 +239,7 @@ export function registerFileTools(
       description: "Create a new version of a file.",
       inputSchema: {
         file_id: z.string().uuid().describe("File UUID"),
-        content: z.string().max(CHARACTER_LIMIT).optional().describe("Version content"),
+        content: z.string().min(1).max(CHARACTER_LIMIT).describe("Version content"),
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
@@ -275,7 +281,7 @@ export function registerFileTools(
       description: "Promote file visibility (e.g., to organization library).",
       inputSchema: {
         file_id: z.string().uuid().describe("File UUID"),
-        visibility: z.string().describe("Target visibility level"),
+        visibility: z.string().min(1).describe("Target visibility level"),
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
@@ -323,9 +329,9 @@ export function registerFileTools(
     },
     withGuard("elnora_create_working_copy", getContext, async ({ file_id, task_id }) => {
       try {
-        const params: Record<string, string | number | undefined> = {};
-        if (task_id) params.taskId = task_id;
-        const result = await getClient().post(`/files/${file_id}/working-copy`, params);
+        const body: Record<string, string> = {};
+        if (task_id) body.taskId = task_id;
+        const result = await getClient().post(`/files/${file_id}/working-copy`, body);
         return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
