@@ -10,6 +10,7 @@ import { corsMiddleware } from "./middleware/cors.js";
 import { mcpRateLimiter } from "./middleware/rate-limiter.js";
 import { SUPPORTED_SCOPES, ALL_SCOPES, API_KEY_PREFIX, API_KEY_MIN_LENGTH } from "./constants.js";
 import { logAuthEvent } from "./middleware/tool-logging.js";
+import axios from "axios";
 import crypto from "node:crypto";
 
 function requireEnv(name: string): string {
@@ -94,7 +95,8 @@ async function main(): Promise<void> {
 
   // Platform OAuth callback — receives the auth code from Elnora platform login
   // CSRF protection: validates mcp_code exists in our session store (CoSAI MCP-T7)
-  app.get("/oauth/callback", (req, res) => {
+  // Rate limited to prevent brute-force auth code guessing (CoSAI MCP-T10)
+  app.get("/oauth/callback", mcpRateLimiter({ maxRequests: 20, windowMs: 60_000 }), (req, res) => {
     const mcpCode = req.query.mcp_code as string;
     const platformCode = req.query.code as string;
     const error = req.query.error as string;
@@ -132,14 +134,14 @@ async function main(): Promise<void> {
 
   /**
    * API Key + OAuth dual auth middleware.
-   * Checks for X-API-Key header first. If present and valid, bypasses OAuth.
+   * Checks for X-API-Key header first. If present, validates against platform.
    * Otherwise falls through to OAuth bearer token validation.
    */
-  function dualAuthMiddleware(req: Request, res: Response, next: NextFunction): void {
+  async function dualAuthMiddleware(req: Request, res: Response, next: NextFunction): Promise<void> {
     const apiKey = req.headers["x-api-key"] as string | undefined;
 
     if (apiKey) {
-      // API key auth path
+      // API key auth path — format check first, then platform validation
       if (!isValidApiKey(apiKey)) {
         logAuthEvent("api_key_rejected", "unknown", { reason: "invalid_format" });
         res.status(401).json({
@@ -149,8 +151,36 @@ async function main(): Promise<void> {
         return;
       }
 
-      // Derive unique clientId from API key hash (CoSAI MCP-T12: per-key audit trail)
-      const keyHash = crypto.createHash("sha256").update(apiKey).digest("hex").slice(0, 12);
+      // Validate API key against the platform (CoSAI MCP-T7: server-side validation)
+      try {
+        const validation = await axios.post(
+          config.tokenValidationUrl,
+          {},
+          { headers: { Authorization: `Bearer ${apiKey}` }, timeout: 10_000 },
+        );
+        if (!validation.data.valid) {
+          logAuthEvent("api_key_rejected", "unknown", { reason: "platform_rejected" });
+          res.status(401).json({
+            error: "invalid_api_key",
+            error_description: "API key rejected by platform",
+          });
+          return;
+        }
+      } catch (error) {
+        logAuthEvent("api_key_rejected", "unknown", { reason: "platform_validation_failed" });
+        res.status(401).json({
+          error: "invalid_api_key",
+          error_description: "Unable to validate API key",
+        });
+        return;
+      }
+
+      // Derive unique clientId via HMAC with server secret (not plain hash)
+      const keyHash = crypto
+        .createHmac("sha256", config.platformClientSecret)
+        .update(apiKey)
+        .digest("hex")
+        .slice(0, 12);
       const apiKeyClientId = `apikey:${keyHash}`;
 
       // Set auth context compatible with OAuth flow

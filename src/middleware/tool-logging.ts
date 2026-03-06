@@ -10,10 +10,16 @@ export function logAuthEvent(
   const entry: Record<string, unknown> = {
     type: "auth_event",
     timestamp: new Date().toISOString(),
-    event,
-    clientId,
+    event: sanitizeLogValue(event),
+    clientId: sanitizeLogValue(clientId),
   };
-  if (details) entry.details = details;
+  if (details) {
+    const sanitized: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(details)) {
+      sanitized[k] = typeof v === "string" ? sanitizeLogValue(v) : v;
+    }
+    entry.details = sanitized;
+  }
   console.error(JSON.stringify(entry));
 }
 
@@ -58,6 +64,14 @@ export function logToolInvocation(
   };
 
   console.error(JSON.stringify(entry));
+}
+
+/**
+ * Sanitize a string for safe log output.
+ * Strips control characters that could enable log injection / log forging.
+ */
+export function sanitizeLogValue(value: string): string {
+  return value.replace(/[\x00-\x1f\x7f]/g, "").slice(0, 500);
 }
 
 /**
