@@ -5,6 +5,24 @@ All notable changes to the Elnora MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.0](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v0.4.2...mcp-server-v0.5.0) (2026-03-06)
+
+
+### ⚠ BREAKING CHANGES
+
+* security hardening, auth overhaul, CI/CD fixes, expanded tool coverage, and documentation refresh
+
+### Features
+
+* security hardening, auth overhaul, CI/CD fixes, expanded tool coverage, and documentation refresh ([ebcdcb1](https://github.com/Elnora-AI/elnora-mcp-server/commit/ebcdcb144c457104d3e29fbb4bb680024db29df4))
+
+
+### Bug Fixes
+
+* sync package version to 0.4.3 and add version extraction to publish workflow ([4433c44](https://github.com/Elnora-AI/elnora-mcp-server/commit/4433c4483b4f505eba5b68de0fab71af30d2a547))
+* use HMAC for rate-limiter key hashing to satisfy CodeQL ([3bcf13c](https://github.com/Elnora-AI/elnora-mcp-server/commit/3bcf13c6b8ed6ee4580f47c9c7eca39aa6abac56))
+* use non-crypto hash for rate-limiter keys to resolve CodeQL alert ([3588066](https://github.com/Elnora-AI/elnora-mcp-server/commit/358806634b27acead8238732fb53ce7da85d8ebb))
+
 ## [0.4.2](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v0.4.1...mcp-server-v0.4.2) (2026-03-06)
 
 
