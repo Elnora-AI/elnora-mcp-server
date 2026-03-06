@@ -148,8 +148,8 @@ async function main(): Promise<void> {
     resourceMetadataUrl: getOAuthProtectedResourceMetadataUrl(mcpServerUrl),
   });
 
-  // Rate limiter for /mcp — uses express-rate-limit (CoSAI MCP-T10)
-  const mcpEndpointLimiter = rateLimit({
+  // Rate limiter for /mcp — applied at app level so CodeQL sees it (CoSAI MCP-T10)
+  app.use("/mcp", rateLimit({
     windowMs: 60_000,
     limit: 60,
     standardHeaders: "draft-7",
@@ -162,7 +162,7 @@ async function main(): Promise<void> {
       return `ip:${req.ip || req.socket.remoteAddress || "unknown"}`;
     },
     message: { error: "rate_limit_exceeded", error_description: "Too many requests. Please retry later." },
-  });
+  }));
 
   /**
    * Middleware 1: API key authentication (runs first).
@@ -173,6 +173,9 @@ async function main(): Promise<void> {
   async function apiKeyAuthMiddleware(req: Request, res: Response, next: NextFunction): Promise<void> {
     const apiKey = req.headers["x-api-key"] as string | undefined;
 
+    // codeql[js/user-controlled-bypass] Dual auth by design: both API key and OAuth paths
+    // validate credentials server-side. API key is validated by the platform's token endpoint;
+    // absence of API key falls through to OAuth bearer token verification in ensureAuthenticated.
     if (!apiKey) {
       next();
       return;
@@ -222,8 +225,8 @@ async function main(): Promise<void> {
     oauthMiddleware(req, res, next);
   }
 
-  // --- MCP Endpoint (protected by rate limiting + dual auth) ---
-  app.post("/mcp", mcpEndpointLimiter, apiKeyAuthMiddleware, ensureAuthenticated, async (req: Request, res: Response) => {
+  // --- MCP Endpoint (protected by dual auth — rate limiting applied via app.use above) ---
+  app.post("/mcp", apiKeyAuthMiddleware, ensureAuthenticated, async (req: Request, res: Response) => {
     try {
       const auth = (req as unknown as Record<string, unknown>).auth as {
         extra?: { platformToken?: string; apiKey?: string };
