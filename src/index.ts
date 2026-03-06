@@ -156,6 +156,8 @@ async function main(): Promise<void> {
   });
 
   // Rate limiter for /mcp — applied at app level so CodeQL sees it (CoSAI MCP-T10)
+  // HMAC key for hashing credentials in rate-limiter keys (not passwords — just bucketing)
+  const rateLimitHmacKey = crypto.randomBytes(32);
   app.use("/mcp", rateLimit({
     windowMs: 60_000,
     limit: 150,
@@ -164,8 +166,8 @@ async function main(): Promise<void> {
     keyGenerator: (req) => {
       const authHeader = req.headers.authorization;
       const apiKeyHeader = req.headers["x-api-key"];
-      if (authHeader) return `auth:${crypto.createHash("sha256").update(authHeader).digest("hex").slice(0, 16)}`;
-      if (apiKeyHeader) return `key:${crypto.createHash("sha256").update(String(apiKeyHeader)).digest("hex").slice(0, 16)}`;
+      if (authHeader) return `auth:${crypto.createHmac("sha256", rateLimitHmacKey).update(authHeader).digest("hex").slice(0, 16)}`;
+      if (apiKeyHeader) return `key:${crypto.createHmac("sha256", rateLimitHmacKey).update(String(apiKeyHeader)).digest("hex").slice(0, 16)}`;
       const ip = req.ip || req.socket.remoteAddress;
       if (!ip) return `ip:unresolved:${crypto.randomUUID()}`;
       // Normalize IPv6-mapped IPv4 (e.g. ::ffff:127.0.0.1 → 127.0.0.1)
