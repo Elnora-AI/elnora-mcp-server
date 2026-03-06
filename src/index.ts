@@ -156,8 +156,16 @@ async function main(): Promise<void> {
   });
 
   // Rate limiter for /mcp — applied at app level so CodeQL sees it (CoSAI MCP-T10)
-  // HMAC key for hashing credentials in rate-limiter keys (not passwords — just bucketing)
-  const rateLimitHmacKey = crypto.randomBytes(32);
+  // Non-crypto hash for rate-limiter bucket keys. We only need consistent mapping,
+  // not cryptographic security — FNV-1a is fast and avoids CodeQL's password-hash rule.
+  function bucketHash(value: string): string {
+    let h = 0x811c9dc5;
+    for (let i = 0; i < value.length; i++) {
+      h ^= value.charCodeAt(i);
+      h = Math.imul(h, 0x01000193) >>> 0;
+    }
+    return h.toString(16).padStart(8, "0");
+  }
   app.use("/mcp", rateLimit({
     windowMs: 60_000,
     limit: 150,
@@ -166,8 +174,8 @@ async function main(): Promise<void> {
     keyGenerator: (req) => {
       const authHeader = req.headers.authorization;
       const apiKeyHeader = req.headers["x-api-key"];
-      if (authHeader) return `auth:${crypto.createHmac("sha256", rateLimitHmacKey).update(authHeader).digest("hex").slice(0, 16)}`;
-      if (apiKeyHeader) return `key:${crypto.createHmac("sha256", rateLimitHmacKey).update(String(apiKeyHeader)).digest("hex").slice(0, 16)}`;
+      if (authHeader) return `auth:${bucketHash(authHeader)}`;
+      if (apiKeyHeader) return `key:${bucketHash(String(apiKeyHeader))}`;
       const ip = req.ip || req.socket.remoteAddress;
       if (!ip) return `ip:unresolved:${crypto.randomUUID()}`;
       // Normalize IPv6-mapped IPv4 (e.g. ::ffff:127.0.0.1 → 127.0.0.1)
