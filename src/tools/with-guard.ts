@@ -29,11 +29,25 @@ export function withGuard<T extends Record<string, unknown>>(
     }
 
     // Execute handler
-    const result = await handler(params);
-    logToolInvocation(toolName, params, ctx.clientId, {
-      success: !result.isError,
-      durationMs: Date.now() - start,
-    });
-    return result;
+    try {
+      const result = await handler(params);
+      logToolInvocation(toolName, params, ctx.clientId, {
+        success: !result.isError,
+        durationMs: Date.now() - start,
+      });
+      return result;
+    } catch (error) {
+      logToolInvocation(toolName, params, ctx.clientId, {
+        success: false,
+        durationMs: Date.now() - start,
+      });
+      return {
+        content: [{
+          type: "text" as const,
+          text: `Error: Unexpected error in ${toolName}: ${error instanceof Error ? error.message : String(error)}`,
+        }],
+        isError: true,
+      };
+    }
   };
 }

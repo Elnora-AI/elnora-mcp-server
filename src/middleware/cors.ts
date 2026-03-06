@@ -34,7 +34,7 @@ export function corsMiddleware(config: ElnoraConfig): RequestHandler {
     }
 
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, MCP-Protocol-Version");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-API-Key, MCP-Protocol-Version");
     res.setHeader("Access-Control-Max-Age", "86400");
     // Never expose tokens or auth headers to browsers
     res.setHeader("Access-Control-Expose-Headers", "WWW-Authenticate");

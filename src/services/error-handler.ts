@@ -1,11 +1,10 @@
-import axios, { AxiosError } from "axios";
+import axios from "axios";
 
 export function handleApiError(error: unknown): string {
   if (axios.isAxiosError(error)) {
-    const axiosErr = error as AxiosError<{ errorCode?: string; messages?: string[] }>;
-    if (axiosErr.response) {
-      const status = axiosErr.response.status;
-      const data = axiosErr.response.data;
+    if (error.response) {
+      const status = error.response.status;
+      const data = error.response.data as { errorCode?: string; messages?: string[] } | undefined;
       const messages = data?.messages?.join(", ") || "";
 
       switch (status) {
@@ -22,9 +21,9 @@ export function handleApiError(error: unknown): string {
         default:
           return `Error: API request failed (${status}). ${messages}`;
       }
-    } else if (axiosErr.code === "ECONNABORTED") {
+    } else if (error.code === "ECONNABORTED") {
       return "Error: Request timed out. The operation may still be in progress.";
-    } else if (axiosErr.code === "ECONNREFUSED") {
+    } else if (error.code === "ECONNREFUSED") {
       return "Error: Service temporarily unavailable. Please try again later.";
     }
   }

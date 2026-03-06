@@ -1,99 +1,70 @@
 import axios, { AxiosInstance } from "axios";
-import { ElnoraConfig, ElnoraTask, ElnoraMessage, ElnoraFile, TokenValidationResult } from "../types.js";
+import { ElnoraConfig } from "../types.js";
 import { REQUEST_TIMEOUT_MS, LONG_REQUEST_TIMEOUT_MS } from "../constants.js";
 
 export class ElnoraApiClient {
   private client: AxiosInstance;
 
-  constructor(config: ElnoraConfig, bearerToken: string) {
+  constructor(config: Pick<ElnoraConfig, "apiUrl">, auth: string | { apiKey: string }) {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    };
+
+    if (typeof auth === "string") {
+      // Bearer token (OAuth flow)
+      headers["Authorization"] = `Bearer ${auth}`;
+    } else {
+      // API key (direct auth)
+      headers["X-API-Key"] = auth.apiKey;
+    }
+
     this.client = axios.create({
       baseURL: config.apiUrl,
       timeout: REQUEST_TIMEOUT_MS,
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-        Authorization: `Bearer ${bearerToken}`,
-      },
+      headers,
     });
   }
 
-  // --- Token Validation ---
+  // --- Generic HTTP helpers (used by new tools) ---
 
-  static async validateToken(tokenValidationUrl: string, token: string): Promise<TokenValidationResult> {
-    const response = await axios.post<TokenValidationResult>(
-      tokenValidationUrl,
-      { token },
-      { timeout: REQUEST_TIMEOUT_MS },
-    );
+  async get<T = unknown>(path: string, params?: Record<string, string | number | undefined>): Promise<T> {
+    const cleaned: Record<string, string | number> = {};
+    if (params) {
+      for (const [k, v] of Object.entries(params)) {
+        if (v !== undefined) cleaned[k] = v;
+      }
+    }
+    const response = await this.client.get<T>(path, { params: cleaned });
     return response.data;
   }
 
-  // --- Tasks ---
-
-  async createTask(title?: string): Promise<ElnoraTask> {
-    const response = await this.client.post<ElnoraTask>("/tasks", {
-      title: title || "New Task",
-    });
+  async post<T = unknown>(path: string, body?: unknown, options?: { timeout?: number }): Promise<T> {
+    const response = await this.client.post<T>(path, body, options ? { timeout: options.timeout } : undefined);
     return response.data;
   }
 
-  async listTasks(
-    status?: string,
-    limit = 20,
-    offset = 0,
-  ): Promise<{ items: ElnoraTask[]; totalCount: number }> {
-    const params: Record<string, string | number> = { limit, offset };
-    if (status) params.status = status;
-    const response = await this.client.get("/tasks", { params });
+  async put<T = unknown>(path: string, body?: unknown): Promise<T> {
+    const response = await this.client.put<T>(path, body);
     return response.data;
   }
 
-  async getTaskMessages(
-    taskId: string,
-    limit = 50,
-    offset = 0,
-  ): Promise<{ items: ElnoraMessage[]; totalCount: number }> {
-    const response = await this.client.get(`/tasks/${taskId}/messages`, {
-      params: { limit, offset },
-    });
+  async del<T = unknown>(path: string): Promise<T> {
+    const response = await this.client.delete<T>(path);
     return response.data;
   }
 
-  // --- Messages ---
+  // --- Convenience methods used by tool handlers ---
 
-  async sendMessage(taskId: string, content: string, fileIds?: string[]): Promise<ElnoraMessage> {
-    const response = await this.client.post<ElnoraMessage>(
-      `/tasks/${taskId}/messages`,
-      { content, fileIds },
-      { timeout: LONG_REQUEST_TIMEOUT_MS },
-    );
-    return response.data;
-  }
-
-  // --- Files ---
-
-  async listFiles(
-    projectId?: string,
-    limit = 20,
-    offset = 0,
-  ): Promise<{ items: ElnoraFile[]; totalCount: number }> {
-    const params: Record<string, string | number> = { limit, offset };
-    if (projectId) params.projectId = projectId;
-    const response = await this.client.get("/files", { params });
-    return response.data;
+  async sendMessage(taskId: string, content: string, fileIds?: string[]): Promise<unknown> {
+    return this.post(`/tasks/${taskId}/messages`, { content, fileIds }, { timeout: LONG_REQUEST_TIMEOUT_MS });
   }
 
   async getFileContent(fileId: string): Promise<{ content: string; name: string; fileType: string }> {
-    const response = await this.client.get(`/files/${fileId}/content`);
-    return response.data;
+    return this.get(`/files/${fileId}/content`);
   }
 
-  async uploadFile(name: string, content: string, fileType?: string): Promise<ElnoraFile> {
-    const response = await this.client.post<ElnoraFile>("/files", {
-      name,
-      content,
-      fileType: fileType || "text/markdown",
-    });
-    return response.data;
+  async uploadFile(name: string, content: string, fileType?: string): Promise<unknown> {
+    return this.post("/files", { name, content, fileType: fileType || "text/markdown" });
   }
 }

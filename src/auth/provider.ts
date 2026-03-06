@@ -11,6 +11,7 @@ import {
 import { AuthInfo } from "@modelcontextprotocol/sdk/server/auth/types.js";
 import { InMemoryClientsStore } from "./clients-store.js";
 import { ElnoraConfig, AuthorizationSession, TokenRecord } from "../types.js";
+import { logAuthEvent } from "../middleware/tool-logging.js";
 import {
   ACCESS_TOKEN_TTL_SECONDS,
   REFRESH_TOKEN_TTL_SECONDS,
@@ -36,11 +37,15 @@ import {
  * - MCP-T9: Audience binding via resource parameter
  * - MCP-T12: Auth event logging
  */
+/** TTL for platform token validation cache (seconds) */
+const VALIDATION_CACHE_TTL_SECONDS = 30;
+
 export class ElnoraOAuthProvider implements OAuthServerProvider {
   private _clientsStore: InMemoryClientsStore;
   private authSessions = new Map<string, AuthorizationSession>();
   private tokenRecords = new Map<string, TokenRecord>();
   private refreshTokenIndex = new Map<string, string>(); // refreshToken -> accessToken
+  private validationCache = new Map<string, number>(); // accessToken -> validatedAt (epoch seconds)
   private config: ElnoraConfig;
 
   constructor(config: ElnoraConfig) {
@@ -71,8 +76,8 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
       createdAt: Date.now(),
     });
 
-    // Schedule cleanup of expired sessions
-    setTimeout(() => this.authSessions.delete(authCode), AUTH_CODE_TTL_SECONDS * 1000);
+    // Schedule cleanup of expired sessions (unref so timer doesn't pin process)
+    setTimeout(() => this.authSessions.delete(authCode), AUTH_CODE_TTL_SECONDS * 1000).unref();
 
     // Redirect to Elnora platform login
     const loginUrl = new URL(this.config.loginUrl);
@@ -80,7 +85,7 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
     loginUrl.searchParams.set("redirect_uri", `${this.config.publicUrl}/oauth/callback`);
     loginUrl.searchParams.set("client_id", this.config.platformClientId);
 
-    console.error(`[auth] authorize: redirecting client ${client.client_id} to platform login`);
+    logAuthEvent("authorize_redirect", client.client_id);
     res.redirect(loginUrl.toString());
   }
 
@@ -99,7 +104,7 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
     client: OAuthClientInformationFull,
     authorizationCode: string,
     _codeVerifier?: string,
-    _redirectUri?: string,
+    redirectUri?: string,
     resource?: URL,
   ): Promise<OAuthTokens> {
     const session = this.authSessions.get(authorizationCode);
@@ -111,8 +116,18 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
       throw new Error("Authorization code was not issued to this client");
     }
 
+    // Validate redirect_uri matches the one from the authorization request (RFC 6749 §4.1.3)
+    if (redirectUri && redirectUri !== session.redirectUri) {
+      logAuthEvent("redirect_uri_mismatch", client.client_id);
+      throw new Error("redirect_uri does not match the authorization request");
+    }
+
     // Delete the auth code — single use only
     this.authSessions.delete(authorizationCode);
+
+    if (!session.platformCode) {
+      throw new Error("Platform authentication not completed — user must authenticate on the platform first");
+    }
 
     // Exchange with Elnora platform for a platform token
     let platformToken: string;
@@ -121,7 +136,7 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
         this.config.tokenExchangeUrl,
         {
           grant_type: "authorization_code",
-          code: session.platformCode || authorizationCode,
+          code: session.platformCode,
           client_id: this.config.platformClientId,
           client_secret: this.config.platformClientSecret,
         },
@@ -129,7 +144,7 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
       );
       platformToken = response.data.access_token;
     } catch (error) {
-      console.error("[auth] platform token exchange failed:", error);
+      logAuthEvent("platform_token_exchange_failed", client.client_id, { error: String(error) });
       throw new Error("Failed to exchange authorization code with platform");
     }
 
@@ -153,11 +168,23 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
       throw new Error("Invalid refresh token");
     }
 
+    // Validate scope subset constraint (OAuth 2.1: refresh MUST NOT escalate scopes)
+    if (scopes && scopes.length > 0) {
+      const escalated = scopes.filter((s) => !record.scopes.includes(s));
+      if (escalated.length > 0) {
+        throw new Error(`Scope escalation not allowed. Requested scopes not in original grant: ${escalated.join(", ")}`);
+      }
+    }
+
     // Rotate: delete old tokens
     this.tokenRecords.delete(accessTokenKey);
     this.refreshTokenIndex.delete(refreshToken);
+    this.validationCache.delete(accessTokenKey);
 
-    console.error(`[auth] refresh token rotation for client ${client.client_id}`);
+    logAuthEvent("refresh_token_rotation", client.client_id, {
+      previousScopes: record.scopes,
+      requestedScopes: scopes || record.scopes,
+    });
 
     // Issue new tokens with the same platform token
     return this.issueTokens(
@@ -176,7 +203,22 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
 
     if (record.expiresAt < Math.floor(Date.now() / 1000)) {
       this.tokenRecords.delete(token);
+      this.validationCache.delete(token);
       throw new Error("Access token expired");
+    }
+
+    // Check validation cache — skip platform round-trip if recently validated
+    const now = Math.floor(Date.now() / 1000);
+    const cachedAt = this.validationCache.get(token);
+    if (cachedAt && (now - cachedAt) < VALIDATION_CACHE_TTL_SECONDS) {
+      return {
+        token,
+        clientId: record.clientId,
+        scopes: record.scopes,
+        expiresAt: record.expiresAt,
+        resource: record.resource ? new URL(record.resource) : undefined,
+        extra: { platformToken: record.platformToken },
+      };
     }
 
     // Validate platform token is still valid
@@ -188,15 +230,23 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
       );
       if (!validation.data.valid) {
         this.tokenRecords.delete(token);
+        this.validationCache.delete(token);
         throw new Error("Underlying platform token revoked");
       }
+      // Cache successful validation
+      this.validationCache.set(token, Math.floor(Date.now() / 1000));
     } catch (error) {
+      // Re-throw our own revocation errors (from the valid:false check above)
+      if (error instanceof Error && error.message === "Underlying platform token revoked") {
+        throw error;
+      }
       if (axios.isAxiosError(error) && error.response?.status === 401) {
         this.tokenRecords.delete(token);
+        this.validationCache.delete(token);
         throw new Error("Underlying platform token revoked");
       }
       // Network errors — don't invalidate, just log
-      console.error("[auth] platform token validation failed (non-fatal):", error);
+      logAuthEvent("platform_validation_network_error", record.clientId, { error: String(error) });
     }
 
     return {
@@ -220,7 +270,8 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
     if (record && record.clientId === client.client_id) {
       this.refreshTokenIndex.delete(record.refreshToken);
       this.tokenRecords.delete(token);
-      console.error(`[auth] revoked access token for client ${client.client_id}`);
+      this.validationCache.delete(token);
+      logAuthEvent("access_token_revoked", client.client_id);
       return;
     }
 
@@ -230,8 +281,9 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
       const rec = this.tokenRecords.get(accessTokenKey);
       if (rec && rec.clientId === client.client_id) {
         this.tokenRecords.delete(accessTokenKey);
+        this.validationCache.delete(accessTokenKey);
         this.refreshTokenIndex.delete(token);
-        console.error(`[auth] revoked refresh token for client ${client.client_id}`);
+        logAuthEvent("refresh_token_revoked", client.client_id);
       }
     }
   }
@@ -249,14 +301,7 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
     // Store the platform code for later exchange
     session.platformCode = platformCode;
 
-    // Build the redirect back to the MCP client
-    const redirectUrl = new URL(session.redirectUri);
-    redirectUrl.searchParams.set("code", mcpCode);
-    if (session.state) {
-      redirectUrl.searchParams.set("state", session.state);
-    }
-
-    console.error(`[auth] platform callback: completing auth for client ${session.clientId}`);
+    logAuthEvent("platform_callback_completed", session.clientId);
   }
 
   /**
@@ -305,9 +350,10 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
     setTimeout(() => {
       this.tokenRecords.delete(accessToken);
       this.refreshTokenIndex.delete(refreshToken);
-    }, cleanupMs);
+      this.validationCache.delete(accessToken);
+    }, cleanupMs).unref();
 
-    console.error(`[auth] issued tokens for client ${clientId} (expires ${new Date((now + ACCESS_TOKEN_TTL_SECONDS) * 1000).toISOString()})`);
+    logAuthEvent("tokens_issued", clientId, { expiresAt: new Date((now + ACCESS_TOKEN_TTL_SECONDS) * 1000).toISOString() });
 
     return {
       access_token: accessToken,
