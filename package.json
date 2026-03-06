@@ -1,6 +1,6 @@
 {
   "name": "@elnora-ai/mcp-server",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "mcpName": "io.github.Elnora-AI/elnora-mcp-server",
   "description": "MCP server for Elnora Platform — AI-powered bioprotocol optimization",
   "type": "module",
