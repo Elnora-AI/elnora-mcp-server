@@ -1,6 +1,8 @@
 name: Deploy to Production
 
 on:
+  release:
+    types: [published]
   workflow_dispatch:
 
 env:
@@ -12,6 +14,9 @@ jobs:
   deploy:
     name: Deploy MCP Server
     runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ github.event.release.tag_name }}
+      EVENT_NAME: ${{ github.event_name }}
     steps:
       - uses: actions/checkout@v6
       - uses: aws-actions/configure-aws-credentials@v5
@@ -20,21 +25,33 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
       - uses: aws-actions/amazon-ecr-login@v2
-      - name: Build and push Docker image
+      - name: Resolve image tag
+        id: tag
         run: |
-          docker build -t ${{ env.AWS_ECR_REGISTRY }}/elnora-mcp-server:latest .
-          docker push ${{ env.AWS_ECR_REGISTRY }}/elnora-mcp-server:latest
+          if [ "$EVENT_NAME" = "release" ]; then
+            echo "version=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=latest" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Build and push Docker image
+        env:
+          IMAGE_TAG: ${{ steps.tag.outputs.version }}
+        run: |
+          IMAGE="$AWS_ECR_REGISTRY/elnora-mcp-server"
+          docker build -t "$IMAGE:$IMAGE_TAG" -t "$IMAGE:latest" .
+          docker push "$IMAGE:$IMAGE_TAG"
+          docker push "$IMAGE:latest"
       - name: Update ECS service
         run: |
           export AWS_PAGER=""
           aws ecs update-service \
-            --cluster ${{ env.AWS_CLUSTER }} \
+            --cluster "$AWS_CLUSTER" \
             --service mcp-server \
             --force-new-deployment \
-            --region ${{ env.AWS_REGION }}
+            --region "$AWS_REGION"
       - name: Wait for stabilization
         run: |
           aws ecs wait services-stable \
-            --cluster ${{ env.AWS_CLUSTER }} \
+            --cluster "$AWS_CLUSTER" \
             --services mcp-server \
-            --region ${{ env.AWS_REGION }}
+            --region "$AWS_REGION"
