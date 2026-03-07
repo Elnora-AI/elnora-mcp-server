@@ -5,6 +5,18 @@ All notable changes to the Elnora MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.6.0](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v0.5.2...mcp-server-v0.6.0) (2026-03-07)
+
+
+### Features
+
+* **mcp:** add org_id support to ElnoraApiClient and org-scoped tools ([11f8cac](https://github.com/Elnora-AI/elnora-mcp-server/commit/11f8cac92c2cbc1f13cb68d5bf1eeef85812f845))
+
+
+### Bug Fixes
+
+* **auth:** add X-Service-Key header and use SDK error types ([#26](https://github.com/Elnora-AI/elnora-mcp-server/issues/26)) ([9ae49ee](https://github.com/Elnora-AI/elnora-mcp-server/commit/9ae49ee6ce9b84d74306757ceaceb24fa0338dc0))
+
 ## [0.5.2](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v0.5.1...mcp-server-v0.5.2) (2026-03-06)
 
 
