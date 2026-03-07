@@ -16,15 +16,18 @@ export function registerSearchTools(
       title: "Search Tasks",
       description: "Full-text search across tasks.",
       inputSchema: {
+        org_id: z.string().uuid().optional().describe("Organization UUID (optional, defaults to active org)"),
         query: z.string().min(1).max(1000).describe("Search query"),
         page: z.number().int().min(1).default(1).describe("Page number"),
         page_size: z.number().int().min(1).max(100).default(25).describe("Results per page"),
       },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
-    withGuard("elnora_search_tasks", getContext, async ({ query, page, page_size }) => {
+    withGuard("elnora_search_tasks", getContext, async ({ org_id, query, page, page_size }) => {
       try {
-        const result = await getClient().get("/search/tasks", { q: query, page, pageSize: page_size });
+        const client = getClient();
+        if (org_id) client.setOrgContext(org_id);
+        const result = await client.get("/search/tasks", { q: query, page, pageSize: page_size });
         return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
@@ -38,15 +41,18 @@ export function registerSearchTools(
       title: "Search Files",
       description: "Full-text search across files.",
       inputSchema: {
+        org_id: z.string().uuid().optional().describe("Organization UUID (optional, defaults to active org)"),
         query: z.string().min(1).max(1000).describe("Search query"),
         page: z.number().int().min(1).default(1).describe("Page number"),
         page_size: z.number().int().min(1).max(100).default(25).describe("Results per page"),
       },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
-    withGuard("elnora_search_files", getContext, async ({ query, page, page_size }) => {
+    withGuard("elnora_search_files", getContext, async ({ org_id, query, page, page_size }) => {
       try {
-        const result = await getClient().get("/search/files", { q: query, page, pageSize: page_size });
+        const client = getClient();
+        if (org_id) client.setOrgContext(org_id);
+        const result = await client.get("/search/files", { q: query, page, pageSize: page_size });
         return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
@@ -60,15 +66,18 @@ export function registerSearchTools(
       title: "Search All",
       description: "Full-text search across all resources (tasks, files, etc.).",
       inputSchema: {
+        org_id: z.string().uuid().optional().describe("Organization UUID (optional, defaults to active org)"),
         query: z.string().min(1).max(1000).describe("Search query"),
         page: z.number().int().min(1).default(1).describe("Page number"),
         page_size: z.number().int().min(1).max(100).default(25).describe("Results per page"),
       },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
-    withGuard("elnora_search_all", getContext, async ({ query, page, page_size }) => {
+    withGuard("elnora_search_all", getContext, async ({ org_id, query, page, page_size }) => {
       try {
-        const result = await getClient().get("/search", { q: query, page, pageSize: page_size });
+        const client = getClient();
+        if (org_id) client.setOrgContext(org_id);
+        const result = await client.get("/search", { q: query, page, pageSize: page_size });
         return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };

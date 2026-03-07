@@ -16,14 +16,17 @@ export function registerProjectTools(
       title: "List Projects",
       description: "List all projects. Returns paginated project summaries.",
       inputSchema: {
+        org_id: z.string().uuid().optional().describe("Organization UUID (optional, defaults to active org)"),
         page: z.number().int().min(1).default(1).describe("Page number"),
         page_size: z.number().int().min(1).max(100).default(25).describe("Results per page"),
       },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
-    withGuard("elnora_list_projects", getContext, async ({ page, page_size }) => {
+    withGuard("elnora_list_projects", getContext, async ({ org_id, page, page_size }) => {
       try {
-        const result = await getClient().get("/projects", { page, pageSize: page_size });
+        const client = getClient();
+        if (org_id) client.setOrgContext(org_id);
+        const result = await client.get("/projects", { page, pageSize: page_size });
         return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
@@ -57,15 +60,18 @@ export function registerProjectTools(
       title: "Create Project",
       description: "Create a new project.",
       inputSchema: {
+        org_id: z.string().uuid().optional().describe("Organization UUID (optional, defaults to active org)"),
         name: z.string().min(1).max(200).describe("Project name"),
         description: z.string().max(2000).optional().describe("Project description"),
         icon: z.string().max(50).optional().describe("Project icon"),
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
-    withGuard("elnora_create_project", getContext, async ({ name, description, icon }) => {
+    withGuard("elnora_create_project", getContext, async ({ org_id, name, description, icon }) => {
       try {
-        const result = await getClient().post("/projects", { name, description, icon });
+        const client = getClient();
+        if (org_id) client.setOrgContext(org_id);
+        const result = await client.post("/projects", { name, description, icon });
         return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };

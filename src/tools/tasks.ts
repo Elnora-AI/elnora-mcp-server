@@ -16,6 +16,7 @@ export function registerTaskTools(
       title: "Create Task",
       description: "Create a new task (conversation thread). Each task is a chat where you send messages and receive AI responses.",
       inputSchema: {
+        org_id: z.string().uuid().optional().describe("Organization UUID (optional, defaults to active org)"),
         project_id: z.string().uuid().optional().describe("Project UUID (optional)"),
         title: z.string().max(200).optional().describe("Task title"),
         initial_message: z.string().max(50_000).optional().describe("Initial message to send"),
@@ -23,9 +24,10 @@ export function registerTaskTools(
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
-    withGuard("elnora_create_task", getContext, async ({ project_id, title, initial_message, context_file_ids }) => {
+    withGuard("elnora_create_task", getContext, async ({ org_id, project_id, title, initial_message, context_file_ids }) => {
       try {
         const client = getClient();
+        if (org_id) client.setOrgContext(org_id);
         const body: Record<string, unknown> = { title: title || "New Task" };
         if (project_id) body.projectId = project_id;
         if (context_file_ids) body.contextFileIds = context_file_ids;
@@ -60,6 +62,7 @@ export function registerTaskTools(
       title: "List Tasks",
       description: "List tasks. Optionally filter by project or status.",
       inputSchema: {
+        org_id: z.string().uuid().optional().describe("Organization UUID (optional, defaults to active org)"),
         project_id: z.string().uuid().optional().describe("Filter by project UUID"),
         status: z.string().optional().describe("Filter by status"),
         page: z.number().int().min(1).default(1).describe("Page number"),
@@ -67,10 +70,12 @@ export function registerTaskTools(
       },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
-    withGuard("elnora_list_tasks", getContext, async ({ project_id, status, page, page_size }) => {
+    withGuard("elnora_list_tasks", getContext, async ({ org_id, project_id, status, page, page_size }) => {
       try {
+        const client = getClient();
+        if (org_id) client.setOrgContext(org_id);
         const path = project_id ? `/projects/${project_id}/tasks` : "/tasks";
-        const result = await getClient().get(path, { page, pageSize: page_size, status });
+        const result = await client.get(path, { page, pageSize: page_size, status });
         return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };

@@ -17,16 +17,19 @@ export function registerFileTools(
       title: "List Files",
       description: "List files in a project or workspace.",
       inputSchema: {
+        org_id: z.string().uuid().optional().describe("Organization UUID (optional, defaults to active org)"),
         project_id: z.string().uuid().optional().describe("Filter by project UUID"),
         page: z.number().int().min(1).default(1).describe("Page number"),
         page_size: z.number().int().min(1).max(100).default(25).describe("Results per page"),
       },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
-    withGuard("elnora_list_files", getContext, async ({ project_id, page, page_size }) => {
+    withGuard("elnora_list_files", getContext, async ({ org_id, project_id, page, page_size }) => {
       try {
+        const client = getClient();
+        if (org_id) client.setOrgContext(org_id);
         const path = project_id ? `/projects/${project_id}/files` : "/files";
-        const result = await getClient().get(path, { page, pageSize: page_size });
+        const result = await client.get(path, { page, pageSize: page_size });
         return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
@@ -123,15 +126,18 @@ export function registerFileTools(
       title: "Upload File",
       description: "Upload a text file to Elnora.",
       inputSchema: {
+        org_id: z.string().uuid().optional().describe("Organization UUID (optional, defaults to active org)"),
         name: z.string().min(1).max(255).describe("Filename"),
         content: z.string().min(1).max(CHARACTER_LIMIT).describe("File content"),
         file_type: z.string().optional().describe("MIME type (default: text/markdown)"),
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
-    withGuard("elnora_upload_file", getContext, async ({ name, content, file_type }) => {
+    withGuard("elnora_upload_file", getContext, async ({ org_id, name, content, file_type }) => {
       try {
-        const result = await getClient().uploadFile(name, content, file_type);
+        const client = getClient();
+        if (org_id) client.setOrgContext(org_id);
+        const result = await client.uploadFile(name, content, file_type);
         return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
@@ -145,6 +151,7 @@ export function registerFileTools(
       title: "Create File",
       description: "Create a new empty file in a project.",
       inputSchema: {
+        org_id: z.string().uuid().optional().describe("Organization UUID (optional, defaults to active org)"),
         project_id: z.string().uuid().describe("Project UUID"),
         name: z.string().min(1).max(255).describe("Filename"),
         folder_id: z.string().uuid().optional().describe("Folder UUID"),
@@ -152,9 +159,11 @@ export function registerFileTools(
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
-    withGuard("elnora_create_file", getContext, async ({ project_id, name, folder_id, file_type }) => {
+    withGuard("elnora_create_file", getContext, async ({ org_id, project_id, name, folder_id, file_type }) => {
       try {
-        const result = await getClient().post("/files", {
+        const client = getClient();
+        if (org_id) client.setOrgContext(org_id);
+        const result = await client.post("/files", {
           projectId: project_id, name, folderId: folder_id, fileType: file_type,
         });
         return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };

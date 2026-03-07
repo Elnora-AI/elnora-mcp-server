@@ -5,6 +5,7 @@ import { REQUEST_TIMEOUT_MS, LONG_REQUEST_TIMEOUT_MS } from "../constants.js";
 export class ElnoraApiClient {
   private client: AxiosInstance;
   private originUrl: string;
+  private orgId?: string;
 
   constructor(config: Pick<ElnoraConfig, "apiUrl">, auth: string | { apiKey: string }) {
     // Derive origin (scheme + host) for root-level endpoints like /health
@@ -30,6 +31,18 @@ export class ElnoraApiClient {
     });
   }
 
+  // --- Org context ---
+
+  /** Set the organization context for subsequent requests (adds X-Organization-Id header). */
+  setOrgContext(orgId: string): void {
+    this.orgId = orgId;
+  }
+
+  private get orgHeaders(): Record<string, string> {
+    if (this.orgId) return { "X-Organization-Id": this.orgId };
+    return {};
+  }
+
   // --- Generic HTTP helpers (used by new tools) ---
 
   async get<T = unknown>(path: string, params?: Record<string, string | number | undefined>): Promise<T> {
@@ -39,22 +52,25 @@ export class ElnoraApiClient {
         if (v !== undefined) cleaned[k] = v;
       }
     }
-    const response = await this.client.get<T>(path, { params: cleaned });
+    const response = await this.client.get<T>(path, { params: cleaned, headers: this.orgHeaders });
     return response.data;
   }
 
   async post<T = unknown>(path: string, body?: unknown, options?: { timeout?: number }): Promise<T> {
-    const response = await this.client.post<T>(path, body, options ? { timeout: options.timeout } : undefined);
+    const response = await this.client.post<T>(path, body, {
+      ...options ? { timeout: options.timeout } : {},
+      headers: this.orgHeaders,
+    });
     return response.data;
   }
 
   async put<T = unknown>(path: string, body?: unknown): Promise<T> {
-    const response = await this.client.put<T>(path, body);
+    const response = await this.client.put<T>(path, body, { headers: this.orgHeaders });
     return response.data;
   }
 
   async del<T = unknown>(path: string): Promise<T> {
-    const response = await this.client.delete<T>(path);
+    const response = await this.client.delete<T>(path, { headers: this.orgHeaders });
     return response.data;
   }
 

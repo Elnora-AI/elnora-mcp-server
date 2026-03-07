@@ -16,13 +16,16 @@ export function registerFolderTools(
       title: "List Folders",
       description: "List folders in a project.",
       inputSchema: {
+        org_id: z.string().uuid().optional().describe("Organization UUID (optional, defaults to active org)"),
         project_id: z.string().uuid().describe("Project UUID"),
       },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
-    withGuard("elnora_list_folders", getContext, async ({ project_id }) => {
+    withGuard("elnora_list_folders", getContext, async ({ org_id, project_id }) => {
       try {
-        const result = await getClient().get(`/projects/${project_id}/folders`);
+        const client = getClient();
+        if (org_id) client.setOrgContext(org_id);
+        const result = await client.get(`/projects/${project_id}/folders`);
         return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
@@ -36,15 +39,18 @@ export function registerFolderTools(
       title: "Create Folder",
       description: "Create a folder in a project.",
       inputSchema: {
+        org_id: z.string().uuid().optional().describe("Organization UUID (optional, defaults to active org)"),
         project_id: z.string().uuid().describe("Project UUID"),
         name: z.string().min(1).max(255).describe("Folder name"),
         parent_id: z.string().uuid().optional().describe("Parent folder UUID for nesting"),
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
-    withGuard("elnora_create_folder", getContext, async ({ project_id, name, parent_id }) => {
+    withGuard("elnora_create_folder", getContext, async ({ org_id, project_id, name, parent_id }) => {
       try {
-        const result = await getClient().post(`/projects/${project_id}/folders`, { name, parentId: parent_id });
+        const client = getClient();
+        if (org_id) client.setOrgContext(org_id);
+        const result = await client.post(`/projects/${project_id}/folders`, { name, parentId: parent_id });
         return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
