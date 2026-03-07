@@ -9,6 +9,7 @@ import {
   OAuthTokenRevocationRequest,
 } from "@modelcontextprotocol/sdk/shared/auth.js";
 import { AuthInfo } from "@modelcontextprotocol/sdk/server/auth/types.js";
+import { InvalidTokenError, ServerError } from "@modelcontextprotocol/sdk/server/auth/errors.js";
 import { InMemoryClientsStore } from "./clients-store.js";
 import { ElnoraConfig, AuthorizationSession, TokenRecord } from "../types.js";
 import { logAuthEvent } from "../middleware/tool-logging.js";
@@ -52,6 +53,11 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
   constructor(config: ElnoraConfig) {
     this.config = config;
     this._clientsStore = new InMemoryClientsStore();
+  }
+
+  /** Headers required by the platform's token validation endpoint */
+  private get validationHeaders() {
+    return { "X-Service-Key": this.config.mcpServiceKey };
   }
 
   get clientsStore(): OAuthRegisteredClientsStore {
@@ -211,7 +217,7 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
       const validation = await axios.post(
         this.config.tokenValidationUrl,
         { token: record.platformToken },
-        { timeout: REQUEST_TIMEOUT_MS },
+        { timeout: REQUEST_TIMEOUT_MS, headers: this.validationHeaders },
       );
       if (!validation.data.valid) {
         this.tokenRecords.delete(accessTokenKey);
@@ -257,14 +263,14 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
   async verifyAccessToken(token: string): Promise<AuthInfo> {
     const record = this.tokenRecords.get(token);
     if (!record) {
-      throw new Error("Invalid access token");
+      throw new InvalidTokenError("Invalid access token");
     }
 
     if (record.expiresAt < Math.floor(Date.now() / 1000)) {
       this.tokenRecords.delete(token);
       this.validationCache.delete(token);
       this.refreshTokenIndex.delete(record.refreshToken);
-      throw new Error("Access token expired");
+      throw new InvalidTokenError("Access token expired");
     }
 
     // Check validation cache — skip platform round-trip if recently validated
@@ -285,31 +291,31 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
       const validation = await axios.post(
         this.config.tokenValidationUrl,
         { token: record.platformToken },
-        { timeout: REQUEST_TIMEOUT_MS },
+        { timeout: REQUEST_TIMEOUT_MS, headers: this.validationHeaders },
       );
       if (!validation.data.valid) {
         this.tokenRecords.delete(token);
         this.validationCache.delete(token);
         this.refreshTokenIndex.delete(record.refreshToken);
-        throw new Error("Underlying platform token revoked");
+        throw new InvalidTokenError("Underlying platform token revoked");
       }
       // Cache successful validation
       this.validationCache.set(token, Math.floor(Date.now() / 1000));
     } catch (error) {
       // Re-throw our own revocation errors (from the valid:false check above)
-      if (error instanceof Error && error.message === "Underlying platform token revoked") {
+      if (error instanceof InvalidTokenError) {
         throw error;
       }
       if (axios.isAxiosError(error) && error.response?.status === 401) {
         this.tokenRecords.delete(token);
         this.validationCache.delete(token);
         this.refreshTokenIndex.delete(record.refreshToken);
-        throw new Error("Underlying platform token revoked");
+        throw new InvalidTokenError("Underlying platform token revoked");
       }
       // Network errors — fail-closed for security (SOC 2 / pharma revocation requirements).
       // Reject the request and force retry on next call.
       logAuthEvent("platform_validation_network_error", record.clientId, { error: String(error) });
-      throw new Error("Platform token validation unavailable — please retry");
+      throw new ServerError("Platform token validation unavailable — please retry");
     }
 
     return {

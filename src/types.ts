@@ -12,6 +12,8 @@ export interface ElnoraConfig {
   platformClientId: string;
   /** Client secret for the MCP server as an OAuth client of the Elnora platform */
   platformClientSecret: string;
+  /** Service key for authenticating to the platform's token validation endpoint */
+  mcpServiceKey: string;
 }
 
 /** Stored authorization session for PKCE flow */
