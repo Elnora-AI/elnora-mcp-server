@@ -14,6 +14,7 @@ const mockConfig: ElnoraConfig = {
   tokenExchangeUrl: "https://platform.elnora.ai/api/v1/auth/token",
   platformClientId: "test",
   platformClientSecret: "test",
+  mcpServiceKey: "test-service-key",
 };
 
 function createTestContext(): RequestContext {

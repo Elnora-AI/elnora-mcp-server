@@ -32,6 +32,7 @@ function loadConfig(): ElnoraConfig {
     tokenExchangeUrl: requireEnv("ELNORA_TOKEN_EXCHANGE_URL"),
     platformClientId: requireEnv("ELNORA_PLATFORM_CLIENT_ID"),
     platformClientSecret: requireEnv("ELNORA_PLATFORM_CLIENT_SECRET"),
+    mcpServiceKey: requireEnv("ELNORA_MCP_SERVICE_KEY"),
   };
 }
 
@@ -48,7 +49,7 @@ async function validateApiKeyWithPlatform(
     const validation = await axios.post(
       config.tokenValidationUrl,
       { token: apiKey },
-      { timeout: 10_000 },
+      { timeout: 10_000, headers: { "X-Service-Key": config.mcpServiceKey } },
     );
     if (validation.data.valid && validation.data.user_id) {
       return { userId: String(validation.data.user_id) };

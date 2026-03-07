@@ -11,6 +11,7 @@ const config: ElnoraConfig = {
   tokenExchangeUrl: "https://api.elnora.ai/oauth/token",
   platformClientId: "mcp-server",
   platformClientSecret: "secret",
+  mcpServiceKey: "test-service-key",
 };
 
 function mockReq(origin?: string, method = "POST") {

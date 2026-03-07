@@ -20,6 +20,7 @@ const config: ElnoraConfig = {
   tokenExchangeUrl: "https://api.example.com/oauth/token",
   platformClientId: "mcp-server",
   platformClientSecret: "secret",
+  mcpServiceKey: "test-service-key",
 };
 
 /** Helper: run the full authorize → callback → exchange flow to get tokens */
