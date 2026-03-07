@@ -68,6 +68,7 @@ describe("ElnoraApiClient", () => {
 
       expect(mockGet).toHaveBeenCalledWith("/tasks", {
         params: { page: 1, pageSize: 25 },
+        headers: {},
       });
       expect(result).toEqual({ tasks: [] });
     });
@@ -78,7 +79,7 @@ describe("ElnoraApiClient", () => {
 
       await client.get("/tasks", { page: 1, status: undefined });
 
-      const passedParams = mockGet.mock.calls[0][1].params;
+      const passedParams = mockGet.mock.calls[0][1]?.params;
       expect(passedParams).not.toHaveProperty("status");
     });
   });
@@ -90,7 +91,7 @@ describe("ElnoraApiClient", () => {
 
       const result = await client.post("/tasks", { title: "Test" });
 
-      expect(mockPost).toHaveBeenCalledWith("/tasks", { title: "Test" }, undefined);
+      expect(mockPost).toHaveBeenCalledWith("/tasks", { title: "Test" }, { headers: {} });
       expect(result).toEqual({ id: "new-task-id" });
     });
 
@@ -100,7 +101,7 @@ describe("ElnoraApiClient", () => {
 
       await client.post("/tasks", { title: "Test" }, { timeout: 120000 });
 
-      expect(mockPost).toHaveBeenCalledWith("/tasks", { title: "Test" }, { timeout: 120000 });
+      expect(mockPost).toHaveBeenCalledWith("/tasks", { title: "Test" }, { timeout: 120000, headers: {} });
     });
   });
 
@@ -111,7 +112,7 @@ describe("ElnoraApiClient", () => {
 
       const result = await client.put("/tasks/123", { title: "Updated" });
 
-      expect(mockPut).toHaveBeenCalledWith("/tasks/123", { title: "Updated" });
+      expect(mockPut).toHaveBeenCalledWith("/tasks/123", { title: "Updated" }, { headers: {} });
       expect(result).toEqual({ updated: true });
     });
   });
@@ -123,7 +124,7 @@ describe("ElnoraApiClient", () => {
 
       const result = await client.del("/tasks/123");
 
-      expect(mockDelete).toHaveBeenCalledWith("/tasks/123");
+      expect(mockDelete).toHaveBeenCalledWith("/tasks/123", { headers: {} });
       expect(result).toBeNull();
     });
   });
@@ -138,7 +139,7 @@ describe("ElnoraApiClient", () => {
       expect(mockPost).toHaveBeenCalledWith(
         "/tasks/task-id/messages",
         { content: "Hello", fileIds: ["file-1"] },
-        { timeout: 120000 },
+        { timeout: 120000, headers: {} },
       );
       expect(result).toEqual({ response: "AI reply" });
     });
@@ -153,7 +154,7 @@ describe("ElnoraApiClient", () => {
 
       const result = await client.getFileContent("file-id");
 
-      expect(mockGet).toHaveBeenCalledWith("/files/file-id/content", { params: {} });
+      expect(mockGet).toHaveBeenCalledWith("/files/file-id/content", { params: {}, headers: {} });
       expect(result).toEqual({ content: "# Protocol", name: "test.md", fileType: "text/markdown" });
     });
   });
@@ -168,7 +169,7 @@ describe("ElnoraApiClient", () => {
       expect(mockPost).toHaveBeenCalledWith(
         "/files/content",
         { name: "test.md", content: "# Content", fileType: "text/markdown" },
-        undefined,
+        { headers: {} },
       );
       expect(result).toEqual({ id: "new-file-id" });
     });
@@ -182,7 +183,7 @@ describe("ElnoraApiClient", () => {
       expect(mockPost).toHaveBeenCalledWith(
         "/files/content",
         { name: "data.json", content: "{}", fileType: "application/json" },
-        undefined,
+        { headers: {} },
       );
     });
   });
