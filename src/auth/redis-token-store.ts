@@ -5,11 +5,13 @@ import { TokenStore } from "./token-store.js";
 
 /**
  * Derive an opaque Redis key from a token value — raw tokens are never used as keys.
- * Uses HMAC-SHA256 (not plain SHA-256) to namespace the digest to this application
- * and avoid CodeQL false positives (these are cryptographically random tokens, not passwords).
+ * NOT password hashing: inputs are crypto.randomBytes(32) tokens with 256 bits of entropy.
+ * SHA-256 is used only to create a fixed-length hex key for Redis, not to protect a secret.
  */
 function hashKey(token: string): string {
-  return crypto.createHmac("sha256", "elnora:mcp:keyderivation").update(token).digest("hex");
+  // CodeQL js/insufficient-password-hash: false positive — these are cryptographically
+  // random tokens (not user-chosen passwords), used as Redis key identifiers only.
+  return crypto.createHash("sha256").update(token).digest("hex"); // lgtm[js/insufficient-password-hash]
 }
 
 // Redis key prefixes
