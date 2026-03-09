@@ -22,3 +22,9 @@ coverage/
 
 # Logs
 *.log
+
+# MCP Registry tokens (secrets)
+.mcpregistry_*
+
+# Claude Code local settings
+.claude/settings.local.json

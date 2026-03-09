@@ -11,7 +11,8 @@ import {
 import { AuthInfo } from "@modelcontextprotocol/sdk/server/auth/types.js";
 import { InvalidTokenError, ServerError } from "@modelcontextprotocol/sdk/server/auth/errors.js";
 import { InMemoryClientsStore } from "./clients-store.js";
-import { ElnoraConfig, AuthorizationSession, TokenRecord } from "../types.js";
+import { TokenStore } from "./token-store.js";
+import { ElnoraConfig, TokenRecord } from "../types.js";
 import { logAuthEvent } from "../middleware/tool-logging.js";
 import {
   ACCESS_TOKEN_TTL_SECONDS,
@@ -44,14 +45,12 @@ const VALIDATION_CACHE_TTL_SECONDS = 30;
 
 export class ElnoraOAuthProvider implements OAuthServerProvider {
   private _clientsStore: InMemoryClientsStore;
-  private authSessions = new Map<string, AuthorizationSession>();
-  private tokenRecords = new Map<string, TokenRecord>();
-  private refreshTokenIndex = new Map<string, string>(); // refreshToken -> accessToken
-  private validationCache = new Map<string, number>(); // accessToken -> validatedAt (epoch seconds)
+  private store: TokenStore;
   private config: ElnoraConfig;
 
-  constructor(config: ElnoraConfig) {
+  constructor(config: ElnoraConfig, store: TokenStore) {
     this.config = config;
+    this.store = store;
     this._clientsStore = new InMemoryClientsStore();
   }
 
@@ -89,7 +88,7 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
     }
 
     // Store session for later exchange
-    this.authSessions.set(authCode, {
+    await this.store.setSession(authCode, {
       clientId: client.client_id,
       codeChallenge: params.codeChallenge,
       redirectUri: params.redirectUri,
@@ -98,10 +97,7 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
       resource: params.resource?.toString(),
       platformState,
       createdAt: Date.now(),
-    });
-
-    // Schedule cleanup of expired sessions (unref so timer doesn't pin process)
-    setTimeout(() => this.authSessions.delete(authCode), AUTH_CODE_TTL_SECONDS * 1000).unref();
+    }, AUTH_CODE_TTL_SECONDS);
 
     // Redirect to Elnora platform login
     const loginUrl = new URL(this.config.loginUrl);
@@ -118,7 +114,7 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
     _client: OAuthClientInformationFull,
     authorizationCode: string,
   ): Promise<string> {
-    const session = this.authSessions.get(authorizationCode);
+    const session = await this.store.getSession(authorizationCode);
     if (!session) {
       throw new Error("Invalid or expired authorization code");
     }
@@ -132,13 +128,13 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
     redirectUri?: string,
     resource?: URL,
   ): Promise<OAuthTokens> {
-    const session = this.authSessions.get(authorizationCode);
+    const session = await this.store.getSession(authorizationCode);
     if (!session) {
       throw new Error("Invalid or expired authorization code");
     }
 
     if (session.clientId !== client.client_id) {
-      this.authSessions.delete(authorizationCode);
+      await this.store.deleteSession(authorizationCode);
       throw new Error("Authorization code was not issued to this client");
     }
 
@@ -178,7 +174,7 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
     }
 
     // Auth code is single-use per RFC 6749 — delete after exchange succeeds
-    this.authSessions.delete(authorizationCode);
+    await this.store.deleteSession(authorizationCode);
 
     // Issue MCP tokens (separate from platform token — CoSAI MCP-T1)
     return this.issueTokens(client.client_id, session.scopes, platformToken, resource?.toString());
@@ -190,12 +186,12 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
     scopes?: string[],
     resource?: URL,
   ): Promise<OAuthTokens> {
-    const accessTokenKey = this.refreshTokenIndex.get(refreshToken);
+    const accessTokenKey = await this.store.getRefreshIndex(refreshToken);
     if (!accessTokenKey) {
       throw new Error("Invalid refresh token");
     }
 
-    const record = this.tokenRecords.get(accessTokenKey);
+    const record = await this.store.getTokenRecord(accessTokenKey);
     if (!record || record.clientId !== client.client_id) {
       throw new Error("Invalid refresh token");
     }
@@ -220,9 +216,9 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
         { timeout: REQUEST_TIMEOUT_MS, headers: this.validationHeaders },
       );
       if (!validation.data.valid) {
-        this.tokenRecords.delete(accessTokenKey);
-        this.refreshTokenIndex.delete(refreshToken);
-        this.validationCache.delete(accessTokenKey);
+        await this.store.deleteTokenRecord(accessTokenKey);
+        await this.store.deleteRefreshIndex(refreshToken);
+        await this.store.deleteValidationCache(accessTokenKey);
         logAuthEvent("refresh_platform_token_revoked", client.client_id);
         throw new Error("Underlying platform token has been revoked");
       }
@@ -231,9 +227,9 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
         throw error;
       }
       if (axios.isAxiosError(error) && error.response?.status === 401) {
-        this.tokenRecords.delete(accessTokenKey);
-        this.refreshTokenIndex.delete(refreshToken);
-        this.validationCache.delete(accessTokenKey);
+        await this.store.deleteTokenRecord(accessTokenKey);
+        await this.store.deleteRefreshIndex(refreshToken);
+        await this.store.deleteValidationCache(accessTokenKey);
         logAuthEvent("refresh_platform_token_revoked", client.client_id);
         throw new Error("Underlying platform token has been revoked");
       }
@@ -242,9 +238,9 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
     }
 
     // Rotate: delete old tokens
-    this.tokenRecords.delete(accessTokenKey);
-    this.refreshTokenIndex.delete(refreshToken);
-    this.validationCache.delete(accessTokenKey);
+    await this.store.deleteTokenRecord(accessTokenKey);
+    await this.store.deleteRefreshIndex(refreshToken);
+    await this.store.deleteValidationCache(accessTokenKey);
 
     logAuthEvent("refresh_token_rotation", client.client_id, {
       previousScopes: record.scopes,
@@ -261,21 +257,21 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
   }
 
   async verifyAccessToken(token: string): Promise<AuthInfo> {
-    const record = this.tokenRecords.get(token);
+    const record = await this.store.getTokenRecord(token);
     if (!record) {
       throw new InvalidTokenError("Invalid access token");
     }
 
     if (record.expiresAt < Math.floor(Date.now() / 1000)) {
-      this.tokenRecords.delete(token);
-      this.validationCache.delete(token);
-      this.refreshTokenIndex.delete(record.refreshToken);
+      await this.store.deleteTokenRecord(token);
+      await this.store.deleteValidationCache(token);
+      await this.store.deleteRefreshIndex(record.refreshToken);
       throw new InvalidTokenError("Access token expired");
     }
 
     // Check validation cache — skip platform round-trip if recently validated
     const now = Math.floor(Date.now() / 1000);
-    const cachedAt = this.validationCache.get(token);
+    const cachedAt = await this.store.getValidationCache(token);
     if (cachedAt && (now - cachedAt) < VALIDATION_CACHE_TTL_SECONDS) {
       return {
         token,
@@ -294,22 +290,22 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
         { timeout: REQUEST_TIMEOUT_MS, headers: this.validationHeaders },
       );
       if (!validation.data.valid) {
-        this.tokenRecords.delete(token);
-        this.validationCache.delete(token);
-        this.refreshTokenIndex.delete(record.refreshToken);
+        await this.store.deleteTokenRecord(token);
+        await this.store.deleteValidationCache(token);
+        await this.store.deleteRefreshIndex(record.refreshToken);
         throw new InvalidTokenError("Underlying platform token revoked");
       }
       // Cache successful validation
-      this.validationCache.set(token, Math.floor(Date.now() / 1000));
+      await this.store.setValidationCache(token, Math.floor(Date.now() / 1000), VALIDATION_CACHE_TTL_SECONDS);
     } catch (error) {
       // Re-throw our own revocation errors (from the valid:false check above)
       if (error instanceof InvalidTokenError) {
         throw error;
       }
       if (axios.isAxiosError(error) && error.response?.status === 401) {
-        this.tokenRecords.delete(token);
-        this.validationCache.delete(token);
-        this.refreshTokenIndex.delete(record.refreshToken);
+        await this.store.deleteTokenRecord(token);
+        await this.store.deleteValidationCache(token);
+        await this.store.deleteRefreshIndex(record.refreshToken);
         throw new InvalidTokenError("Underlying platform token revoked");
       }
       // Network errors — fail-closed for security (SOC 2 / pharma revocation requirements).
@@ -332,8 +328,9 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
    * Used by index.ts to construct the API client — keeps platform tokens
    * out of AuthInfo.extra (CoSAI MCP-T1: no token passthrough).
    */
-  getPlatformToken(accessToken: string): string | undefined {
-    return this.tokenRecords.get(accessToken)?.platformToken;
+  async getPlatformToken(accessToken: string): Promise<string | undefined> {
+    const record = await this.store.getTokenRecord(accessToken);
+    return record?.platformToken;
   }
 
   async revokeToken(
@@ -343,23 +340,23 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
     const token = request.token;
 
     // Check if it's an access token
-    const record = this.tokenRecords.get(token);
+    const record = await this.store.getTokenRecord(token);
     if (record && record.clientId === client.client_id) {
-      this.refreshTokenIndex.delete(record.refreshToken);
-      this.tokenRecords.delete(token);
-      this.validationCache.delete(token);
+      await this.store.deleteRefreshIndex(record.refreshToken);
+      await this.store.deleteTokenRecord(token);
+      await this.store.deleteValidationCache(token);
       logAuthEvent("access_token_revoked", client.client_id);
       return;
     }
 
     // Check if it's a refresh token
-    const accessTokenKey = this.refreshTokenIndex.get(token);
+    const accessTokenKey = await this.store.getRefreshIndex(token);
     if (accessTokenKey) {
-      const rec = this.tokenRecords.get(accessTokenKey);
+      const rec = await this.store.getTokenRecord(accessTokenKey);
       if (rec && rec.clientId === client.client_id) {
-        this.tokenRecords.delete(accessTokenKey);
-        this.validationCache.delete(accessTokenKey);
-        this.refreshTokenIndex.delete(token);
+        await this.store.deleteTokenRecord(accessTokenKey);
+        await this.store.deleteValidationCache(accessTokenKey);
+        await this.store.deleteRefreshIndex(token);
         logAuthEvent("refresh_token_revoked", client.client_id);
       }
     }
@@ -370,8 +367,8 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
    * client redirect URL atomically (single session lookup, no race window).
    * Verifies platformState to prevent CSRF / code substitution attacks.
    */
-  handlePlatformCallback(mcpCode: string, platformCode: string, platformState: string): string {
-    const session = this.authSessions.get(mcpCode);
+  async handlePlatformCallback(mcpCode: string, platformCode: string, platformState: string): Promise<string> {
+    const session = await this.store.getSession(mcpCode);
     if (!session) {
       throw new Error("Invalid or expired MCP authorization code");
     }
@@ -394,7 +391,7 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
     }
 
     // Store the platform code for later exchange
-    session.platformCode = platformCode;
+    await this.store.updateSession(mcpCode, { platformCode });
 
     logAuthEvent("platform_callback_completed", session.clientId);
 
@@ -414,12 +411,12 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
     return redirectUrl.toString();
   }
 
-  private issueTokens(
+  private async issueTokens(
     clientId: string,
     scopes: string[],
     platformToken: string,
     resource?: string,
-  ): OAuthTokens {
+  ): Promise<OAuthTokens> {
     const accessToken = crypto.randomBytes(32).toString("base64url");
     const refreshToken = crypto.randomBytes(32).toString("base64url");
     const now = Math.floor(Date.now() / 1000);
@@ -435,26 +432,8 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
       createdAt: now,
     };
 
-    this.tokenRecords.set(accessToken, record);
-    this.refreshTokenIndex.set(refreshToken, accessToken);
-
-    // Schedule cleanup of expired tokens.
-    // 30-day TTL (2,592,000,000 ms) exceeds the 32-bit setTimeout limit (~24.8 days).
-    // Chain two timers: first fires at the safe max, second fires for the remainder.
-    const totalMs = REFRESH_TOKEN_TTL_SECONDS * 1000;
-    const MAX_TIMEOUT = 2_147_483_647; // 2^31 - 1
-    const cleanup = () => {
-      this.tokenRecords.delete(accessToken);
-      this.refreshTokenIndex.delete(refreshToken);
-      this.validationCache.delete(accessToken);
-    };
-    if (totalMs <= MAX_TIMEOUT) {
-      setTimeout(cleanup, totalMs).unref();
-    } else {
-      setTimeout(() => {
-        setTimeout(cleanup, totalMs - MAX_TIMEOUT).unref();
-      }, MAX_TIMEOUT).unref();
-    }
+    await this.store.setTokenRecord(accessToken, record, REFRESH_TOKEN_TTL_SECONDS);
+    await this.store.setRefreshIndex(refreshToken, accessToken, REFRESH_TOKEN_TTL_SECONDS);
 
     logAuthEvent("tokens_issued", clientId, { expiresAt: new Date((now + ACCESS_TOKEN_TTL_SECONDS) * 1000).toISOString() });
 
