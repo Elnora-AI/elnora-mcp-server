@@ -28,7 +28,10 @@ export function registerFileTools(
       try {
         const client = getClient();
         if (org_id) client.setOrgContext(org_id);
-        const path = project_id ? `/projects/${project_id}/files` : "/files";
+        if (!project_id) {
+          return { content: [{ type: "text" as const, text: "Error: project_id is required. Use elnora_list_projects to find your project ID first." }], isError: true };
+        }
+        const path = `/projects/${project_id}/files`;
         const result = await client.get(path, { page, pageSize: page_size });
         return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
       } catch (error) {
