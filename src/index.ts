@@ -11,6 +11,8 @@ import { createElnoraServer } from "./server.js";
 import { corsMiddleware } from "./middleware/cors.js";
 import { SUPPORTED_SCOPES, ALL_SCOPES } from "./constants.js";
 import { logAuthEvent } from "./middleware/tool-logging.js";
+import { RedisTokenStore } from "./auth/redis-token-store.js";
+import { TokenStore } from "./auth/token-store.js";
 import rateLimit from "express-rate-limit";
 import axios from "axios";
 
@@ -33,6 +35,7 @@ function loadConfig(): ElnoraConfig {
     platformClientId: requireEnv("ELNORA_PLATFORM_CLIENT_ID"),
     platformClientSecret: requireEnv("ELNORA_PLATFORM_CLIENT_SECRET"),
     mcpServiceKey: requireEnv("ELNORA_MCP_SERVICE_KEY"),
+    redisUrl: requireEnv("REDIS_URL"),
   };
 }
 
@@ -72,6 +75,11 @@ async function main(): Promise<void> {
     }
   }
 
+  // --- Redis token store (fail-closed — server won't start without Redis) ---
+  const store: TokenStore = new RedisTokenStore(config.redisUrl);
+  await store.ping();
+  console.error("Redis token store connected");
+
   const app = express();
 
   // --- Security middleware (CoSAI MCP-T7) ---
@@ -89,13 +97,18 @@ async function main(): Promise<void> {
     next();
   });
 
-  // Health check (no auth)
-  app.get("/health", (_req, res) => {
-    res.json({ status: "ok", service: "elnora-mcp-server" });
+  // Health check — verifies Redis connectivity
+  app.get("/health", async (_req, res) => {
+    try {
+      await store.ping();
+      res.json({ status: "ok", service: "elnora-mcp-server", redis: "connected" });
+    } catch {
+      res.status(503).json({ status: "degraded", service: "elnora-mcp-server", redis: "disconnected" });
+    }
   });
 
   // --- OAuth 2.1 Authorization Server ---
-  const provider = new ElnoraOAuthProvider(config);
+  const provider = new ElnoraOAuthProvider(config, store);
   const issuerUrl = new URL(config.publicUrl);
   const mcpServerUrl = new URL(`${config.publicUrl}/mcp`);
 
@@ -122,7 +135,7 @@ async function main(): Promise<void> {
     legacyHeaders: false,
     message: { error: "rate_limit_exceeded", error_description: "Too many callback requests. Please retry later." },
   });
-  app.get("/oauth/callback", callbackLimiter, (req, res) => {
+  app.get("/oauth/callback", callbackLimiter, async (req, res) => {
     const mcpCode = req.query.mcp_code as string;
     const platformCode = req.query.code as string;
     const platformState = req.query.state as string;
@@ -138,7 +151,7 @@ async function main(): Promise<void> {
     }
 
     try {
-      const redirectUrl = provider.handlePlatformCallback(mcpCode, platformCode, platformState);
+      const redirectUrl = await provider.handlePlatformCallback(mcpCode, platformCode, platformState);
       res.redirect(redirectUrl);
     } catch (err) {
       logAuthEvent("platform_callback_failed", "unknown", { error: String(err) });
@@ -259,7 +272,7 @@ async function main(): Promise<void> {
       const scopes = auth?.scopes || [];
 
       // Retrieve platform token via provider method (not via AuthInfo.extra — CoSAI MCP-T1)
-      const platformToken = !isApiKeyAuth && auth?.token ? provider.getPlatformToken(auth.token) : undefined;
+      const platformToken = !isApiKeyAuth && auth?.token ? await provider.getPlatformToken(auth.token) : undefined;
 
       // Guard against empty/missing platform token
       if (!isApiKeyAuth && !platformToken) {
@@ -315,9 +328,10 @@ async function main(): Promise<void> {
   });
 
   // Graceful shutdown — let in-flight requests drain before ECS kills the process
-  const gracefulShutdown = (signal: string) => {
+  const gracefulShutdown = async (signal: string) => {
     console.error(`${signal} received — shutting down gracefully`);
-    httpServer.close(() => {
+    httpServer.close(async () => {
+      await store.disconnect();
       process.exit(0);
     });
     // Force-exit after 25s if connections haven't drained

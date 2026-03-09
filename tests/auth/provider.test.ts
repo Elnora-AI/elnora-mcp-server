@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ElnoraOAuthProvider } from "../../src/auth/provider.js";
+import { InMemoryTokenStore } from "../../src/auth/in-memory-token-store.js";
 import type { ElnoraConfig } from "../../src/types.js";
 
 vi.mock("axios", () => ({
@@ -21,6 +22,7 @@ const config: ElnoraConfig = {
   platformClientId: "mcp-server",
   platformClientSecret: "secret",
   mcpServiceKey: "test-service-key",
+  redisUrl: "redis://localhost:6379",
 };
 
 describe("ElnoraOAuthProvider", () => {
@@ -28,7 +30,7 @@ describe("ElnoraOAuthProvider", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    provider = new ElnoraOAuthProvider(config);
+    provider = new ElnoraOAuthProvider(config, new InMemoryTokenStore());
   });
 
   describe("clientsStore", () => {
@@ -112,7 +114,7 @@ describe("ElnoraOAuthProvider", () => {
 
       // Simulate platform callback
       const platformState = redirectUrl.searchParams.get("state")!;
-      provider.handlePlatformCallback(mcpCode, "platform-auth-code", platformState);
+      await provider.handlePlatformCallback(mcpCode, "platform-auth-code", platformState);
 
       // Mock platform token exchange
       vi.mocked(axios.post).mockResolvedValueOnce({
@@ -174,7 +176,7 @@ describe("ElnoraOAuthProvider", () => {
       const mcpCode = redirectUrl.searchParams.get("mcp_code")!;
 
       const platformState2 = redirectUrl.searchParams.get("state")!;
-      provider.handlePlatformCallback(mcpCode, "platform-auth-code", platformState2);
+      await provider.handlePlatformCallback(mcpCode, "platform-auth-code", platformState2);
 
       await expect(
         provider.exchangeAuthorizationCode(client, mcpCode, undefined, "http://evil.example.com/callback"),
@@ -243,8 +245,8 @@ describe("ElnoraOAuthProvider", () => {
   });
 
   describe("handlePlatformCallback", () => {
-    it("throws for invalid mcp_code", () => {
-      expect(() => provider.handlePlatformCallback("invalid", "platform-code", "some-state")).toThrow(
+    it("throws for invalid mcp_code", async () => {
+      await expect(provider.handlePlatformCallback("invalid", "platform-code", "some-state")).rejects.toThrow(
         "Invalid or expired MCP authorization code",
       );
     });
@@ -266,7 +268,7 @@ describe("ElnoraOAuthProvider", () => {
       const loginUrl = new URL(redirectFn.mock.calls[0][0]);
       const mcpCode = loginUrl.searchParams.get("mcp_code")!;
 
-      expect(() => provider.handlePlatformCallback(mcpCode, "platform-code", "wrong-state")).toThrow(
+      await expect(provider.handlePlatformCallback(mcpCode, "platform-code", "wrong-state")).rejects.toThrow(
         "State parameter mismatch",
       );
     });
@@ -288,7 +290,7 @@ describe("ElnoraOAuthProvider", () => {
       const mcpCode = loginUrl.searchParams.get("mcp_code")!;
       const platformState = loginUrl.searchParams.get("state")!;
 
-      expect(() => provider.handlePlatformCallback(mcpCode, "", platformState)).toThrow(
+      await expect(provider.handlePlatformCallback(mcpCode, "", platformState)).rejects.toThrow(
         "Platform authorization code is empty",
       );
     });
@@ -311,7 +313,7 @@ describe("ElnoraOAuthProvider", () => {
       const mcpCode = loginUrl.searchParams.get("mcp_code")!;
       const platformState = loginUrl.searchParams.get("state")!;
 
-      const redirectUrl = provider.handlePlatformCallback(mcpCode, "platform-code", platformState);
+      const redirectUrl = await provider.handlePlatformCallback(mcpCode, "platform-code", platformState);
       const parsed = new URL(redirectUrl);
 
       expect(parsed.origin).toBe("http://localhost:3000");

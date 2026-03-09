@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ElnoraOAuthProvider } from "../../src/auth/provider.js";
+import { InMemoryTokenStore } from "../../src/auth/in-memory-token-store.js";
 import type { ElnoraConfig } from "../../src/types.js";
 
 vi.mock("axios", () => ({
@@ -21,6 +22,7 @@ const config: ElnoraConfig = {
   platformClientId: "mcp-server",
   platformClientSecret: "secret",
   mcpServiceKey: "test-service-key",
+  redisUrl: "redis://localhost:6379",
 };
 
 /** Helper: run the full authorize → callback → exchange flow to get tokens */
@@ -43,7 +45,7 @@ async function issueTokens(provider: ElnoraOAuthProvider) {
   const mcpCode = redirectUrl.searchParams.get("mcp_code")!;
 
   const platformState = redirectUrl.searchParams.get("state")!;
-  provider.handlePlatformCallback(mcpCode, "platform-auth-code", platformState);
+  await provider.handlePlatformCallback(mcpCode, "platform-auth-code", platformState);
 
   vi.mocked(axios.post).mockResolvedValueOnce({
     data: { access_token: "platform-token-123" },
@@ -58,7 +60,7 @@ describe("ElnoraOAuthProvider — advanced flows", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    provider = new ElnoraOAuthProvider(config);
+    provider = new ElnoraOAuthProvider(config, new InMemoryTokenStore());
   });
 
   describe("verifyAccessToken", () => {
@@ -76,7 +78,7 @@ describe("ElnoraOAuthProvider — advanced flows", () => {
       // platformToken should NOT be in AuthInfo.extra (CoSAI MCP-T1: no token passthrough)
       expect(authInfo.extra?.platformToken).toBeUndefined();
       // But it should be accessible via the dedicated method
-      expect(provider.getPlatformToken(tokens.access_token)).toBe("platform-token-123");
+      expect(await provider.getPlatformToken(tokens.access_token)).toBe("platform-token-123");
     });
 
     it("revokes token when platform returns { valid: false }", async () => {
@@ -239,9 +241,9 @@ describe("ElnoraOAuthProvider — advanced flows", () => {
       const mcpCode = redirectUrl.searchParams.get("mcp_code")!;
       const platformState = redirectUrl.searchParams.get("state")!;
 
-      provider.handlePlatformCallback(mcpCode, "platform-code-1", platformState);
+      await provider.handlePlatformCallback(mcpCode, "platform-code-1", platformState);
 
-      expect(() => provider.handlePlatformCallback(mcpCode, "platform-code-2", platformState)).toThrow(
+      await expect(provider.handlePlatformCallback(mcpCode, "platform-code-2", platformState)).rejects.toThrow(
         "Authorization callback already processed",
       );
     });

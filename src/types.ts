@@ -14,6 +14,8 @@ export interface ElnoraConfig {
   platformClientSecret: string;
   /** Service key for authenticating to the platform's token validation endpoint */
   mcpServiceKey: string;
+  /** Redis connection URL (e.g. redis://localhost:6379 or rediss://... for TLS) */
+  redisUrl: string;
 }
 
 /** Stored authorization session for PKCE flow */
