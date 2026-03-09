@@ -5,6 +5,13 @@ All notable changes to the Elnora MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.7.0](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v0.6.0...mcp-server-v0.7.0) (2026-03-09)
+
+
+### Features
+
+* **auth:** Redis-backed token persistence ([#28](https://github.com/Elnora-AI/elnora-mcp-server/issues/28)) ([87b265a](https://github.com/Elnora-AI/elnora-mcp-server/commit/87b265a154a3e16e69e0d6bc663d22622fe95239))
+
 ## [0.6.0](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v0.5.2...mcp-server-v0.6.0) (2026-03-07)
 
 
