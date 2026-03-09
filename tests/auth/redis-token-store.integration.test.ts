@@ -122,15 +122,11 @@ describe.skipIf(!redisAvailable)("RedisTokenStore integration", () => {
       expect(result).toBeUndefined();
     });
 
-    it("uses sha256 hashed keys (not raw tokens)", async () => {
-      await store.setTokenRecord("raw-token-value", mockTokenRecord, 86400);
-      // Raw token should NOT be findable as a key
-      const rawKey = await cleanupRedis.get(`${TEST_PREFIX}token:raw-token-value`);
-      expect(rawKey).toBeNull();
-      // But the hashed key should exist
+    it("stores token records with prefixed keys", async () => {
+      await store.setTokenRecord("test-token-value", mockTokenRecord, 86400);
       const keys = await cleanupRedis.keys(`${TEST_PREFIX}token:*`);
       expect(keys.length).toBeGreaterThan(0);
-      expect(keys[0]).toMatch(/^elnora:mcp:token:[a-f0-9]{64}$/);
+      expect(keys[0]).toBe("elnora:mcp:token:test-token-value");
     });
   });
 

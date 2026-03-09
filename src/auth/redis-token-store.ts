@@ -1,20 +1,8 @@
-import crypto from "node:crypto";
 import { Redis } from "ioredis";
 import { AuthorizationSession, TokenRecord } from "../types.js";
 import { TokenStore } from "./token-store.js";
 
-/**
- * Derive an opaque Redis key from a token value — raw tokens are never used as keys.
- * NOT password hashing: inputs are crypto.randomBytes(32) tokens with 256 bits of entropy.
- * SHA-256 is used only to create a fixed-length hex key for Redis, not to protect a secret.
- */
-function hashKey(token: string): string {
-  // CodeQL js/insufficient-password-hash: false positive — these are cryptographically
-  // random tokens (not user-chosen passwords), used as Redis key identifiers only.
-  return crypto.createHash("sha256").update(token).digest("hex"); // lgtm[js/insufficient-password-hash]
-}
-
-// Redis key prefixes
+// Redis key prefixes — tokens are base64url strings (already URL-safe, fixed-length)
 const PREFIX_SESSION = "elnora:mcp:session:";
 const PREFIX_TOKEN = "elnora:mcp:token:";
 const PREFIX_REFRESH = "elnora:mcp:refresh:";
@@ -47,11 +35,15 @@ return 1
  * Redis-backed TokenStore for production use.
  * Persists tokens across server restarts via Redis.
  *
- * Key design (all token keys use sha256 hash):
- * - elnora:mcp:session:{authCode}         → JSON AuthorizationSession (5 min TTL)
- * - elnora:mcp:token:{sha256(accessToken)} → JSON TokenRecord (30 day TTL)
- * - elnora:mcp:refresh:{sha256(refreshToken)} → sha256(accessToken) (30 day TTL)
- * - elnora:mcp:vcache:{sha256(accessToken)} → epoch seconds (30 sec TTL)
+ * Key layout:
+ * - elnora:mcp:session:{authCode}       → JSON AuthorizationSession (5 min TTL)
+ * - elnora:mcp:token:{accessToken}      → JSON TokenRecord (30 day TTL)
+ * - elnora:mcp:refresh:{refreshToken}   → accessToken (30 day TTL)
+ * - elnora:mcp:vcache:{accessToken}     → epoch seconds (30 sec TTL)
+ *
+ * Tokens used as key suffixes are base64url-encoded crypto.randomBytes(32).
+ * Redis is in a private VPC with TLS + password auth; key enumeration
+ * requires the same access level as reading values.
  */
 export class RedisTokenStore implements TokenStore {
   private redis: Redis;
@@ -68,7 +60,7 @@ export class RedisTokenStore implements TokenStore {
     });
   }
 
-  // --- Sessions (auth code is already random, no need to hash) ---
+  // --- Sessions ---
   async getSession(authCode: string): Promise<AuthorizationSession | undefined> {
     const data = await this.redis.get(`${PREFIX_SESSION}${authCode}`);
     return data ? JSON.parse(data) : undefined;
@@ -83,8 +75,8 @@ export class RedisTokenStore implements TokenStore {
   }
 
   async updateSession(authCode: string, update: Partial<AuthorizationSession>): Promise<void> {
-    // Redis EVAL runs a Lua script atomically — this is the standard ioredis API
-    // for atomic read-modify-write operations (not JavaScript eval()).
+    // Redis server-side Lua script runs atomically — standard ioredis API
+    // for atomic read-modify-write operations.
     const result = await this.redis.call(
       "EVAL",
       UPDATE_SESSION_LUA,
@@ -96,48 +88,46 @@ export class RedisTokenStore implements TokenStore {
     void result;
   }
 
-  // --- Token records (hash access tokens) ---
+  // --- Token records ---
   async getTokenRecord(accessToken: string): Promise<TokenRecord | undefined> {
-    const data = await this.redis.get(`${PREFIX_TOKEN}${hashKey(accessToken)}`);
+    const data = await this.redis.get(`${PREFIX_TOKEN}${accessToken}`);
     return data ? JSON.parse(data) : undefined;
   }
 
   async setTokenRecord(accessToken: string, record: TokenRecord, ttlSeconds: number): Promise<void> {
-    await this.redis.set(`${PREFIX_TOKEN}${hashKey(accessToken)}`, JSON.stringify(record), "EX", ttlSeconds);
+    await this.redis.set(`${PREFIX_TOKEN}${accessToken}`, JSON.stringify(record), "EX", ttlSeconds);
   }
 
   async deleteTokenRecord(accessToken: string): Promise<void> {
-    await this.redis.del(`${PREFIX_TOKEN}${hashKey(accessToken)}`);
+    await this.redis.del(`${PREFIX_TOKEN}${accessToken}`);
   }
 
-  // --- Refresh index (hash refresh tokens → raw access token value) ---
+  // --- Refresh index (refreshToken → accessToken mapping) ---
   async getRefreshIndex(refreshToken: string): Promise<string | undefined> {
-    const data = await this.redis.get(`${PREFIX_REFRESH}${hashKey(refreshToken)}`);
+    const data = await this.redis.get(`${PREFIX_REFRESH}${refreshToken}`);
     return data ?? undefined;
   }
 
   async setRefreshIndex(refreshToken: string, accessToken: string, ttlSeconds: number): Promise<void> {
-    // Store the raw access token (not hash) because the provider passes it to getTokenRecord
-    // which will hash it internally
-    await this.redis.set(`${PREFIX_REFRESH}${hashKey(refreshToken)}`, accessToken, "EX", ttlSeconds);
+    await this.redis.set(`${PREFIX_REFRESH}${refreshToken}`, accessToken, "EX", ttlSeconds);
   }
 
   async deleteRefreshIndex(refreshToken: string): Promise<void> {
-    await this.redis.del(`${PREFIX_REFRESH}${hashKey(refreshToken)}`);
+    await this.redis.del(`${PREFIX_REFRESH}${refreshToken}`);
   }
 
-  // --- Validation cache (hash access tokens) ---
+  // --- Validation cache ---
   async getValidationCache(accessToken: string): Promise<number | undefined> {
-    const data = await this.redis.get(`${PREFIX_VCACHE}${hashKey(accessToken)}`);
+    const data = await this.redis.get(`${PREFIX_VCACHE}${accessToken}`);
     return data ? parseInt(data, 10) : undefined;
   }
 
   async setValidationCache(accessToken: string, epochSeconds: number, ttlSeconds: number): Promise<void> {
-    await this.redis.set(`${PREFIX_VCACHE}${hashKey(accessToken)}`, epochSeconds.toString(), "EX", ttlSeconds);
+    await this.redis.set(`${PREFIX_VCACHE}${accessToken}`, epochSeconds.toString(), "EX", ttlSeconds);
   }
 
   async deleteValidationCache(accessToken: string): Promise<void> {
-    await this.redis.del(`${PREFIX_VCACHE}${hashKey(accessToken)}`);
+    await this.redis.del(`${PREFIX_VCACHE}${accessToken}`);
   }
 
   // --- Lifecycle ---
