@@ -5,6 +5,19 @@ All notable changes to the Elnora MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.8.0](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v0.7.0...mcp-server-v0.8.0) (2026-03-12)
+
+
+### Features
+
+* **ci:** switch from static AWS keys to OIDC federation ([36e10c9](https://github.com/Elnora-AI/elnora-mcp-server/commit/36e10c92261273f5469521ffb57115f6e428201c))
+* **ci:** switch GitHub Actions from static AWS keys to OIDC federation ([#32](https://github.com/Elnora-AI/elnora-mcp-server/issues/32)) ([5b44bfb](https://github.com/Elnora-AI/elnora-mcp-server/commit/5b44bfbcd780dab1356ccabfc47a5899d91768c9))
+
+
+### Reverts
+
+* undo direct-to-main OIDC change (will redo as PR) ([153a87f](https://github.com/Elnora-AI/elnora-mcp-server/commit/153a87f4ea5063a5a2f48d8bb47ae622468189a6))
+
 ## [0.7.0](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v0.6.0...mcp-server-v0.7.0) (2026-03-09)
 
 
