@@ -5,6 +5,13 @@ All notable changes to the Elnora MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.9.0](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v0.8.0...mcp-server-v0.9.0) (2026-03-14)
+
+
+### Features
+
+* **security:** harden API client and add response formatting ([#33](https://github.com/Elnora-AI/elnora-mcp-server/issues/33)) ([f52997f](https://github.com/Elnora-AI/elnora-mcp-server/commit/f52997f9761db988d6422d3593ce5d27dfe4f79c))
+
 ## [0.8.0](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v0.7.0...mcp-server-v0.8.0) (2026-03-12)
 
 
