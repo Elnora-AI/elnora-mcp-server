@@ -4,6 +4,7 @@ import { ElnoraApiClient } from "../services/elnora-api-client.js";
 import { RequestContext } from "../server.js";
 import { handleApiError } from "../services/error-handler.js";
 import { withGuard } from "./with-guard.js";
+import { OUTPUT_OPTIONS_SCHEMA } from "../services/response-formatter.js";
 
 export function registerOrgTools(
   server: McpServer,
@@ -15,7 +16,9 @@ export function registerOrgTools(
     {
       title: "List Organizations",
       description: "List organizations the user belongs to.",
-      inputSchema: {},
+      inputSchema: {
+        ...OUTPUT_OPTIONS_SCHEMA,
+      },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
     withGuard("elnora_list_orgs", getContext, async () => {
@@ -35,6 +38,8 @@ export function registerOrgTools(
       description: "Get a single organization by UUID.",
       inputSchema: {
         org_id: z.string().uuid().describe("Organization UUID"),
+
+        ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
@@ -56,6 +61,8 @@ export function registerOrgTools(
       inputSchema: {
         name: z.string().min(1).max(200).describe("Organization name"),
         description: z.string().max(2000).optional().describe("Description"),
+
+        ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
@@ -78,6 +85,8 @@ export function registerOrgTools(
         org_id: z.string().uuid().describe("Organization UUID"),
         name: z.string().min(1).max(200).optional().describe("New name"),
         description: z.string().max(2000).optional().describe("New description"),
+
+        ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
@@ -104,6 +113,8 @@ export function registerOrgTools(
       description: "List members of an organization.",
       inputSchema: {
         org_id: z.string().uuid().describe("Organization UUID"),
+
+        ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
@@ -126,6 +137,8 @@ export function registerOrgTools(
         org_id: z.string().uuid().describe("Organization UUID"),
         member_id: z.string().min(1).max(255).describe("Member ID"),
         role: z.string().min(1).max(100).describe("New role"),
+
+        ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
@@ -147,6 +160,8 @@ export function registerOrgTools(
       inputSchema: {
         org_id: z.string().uuid().describe("Organization UUID"),
         member_id: z.string().min(1).max(255).describe("Member ID"),
+
+        ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
     },
@@ -167,6 +182,8 @@ export function registerOrgTools(
       description: "Get billing status for an organization.",
       inputSchema: {
         org_id: z.string().uuid().describe("Organization UUID"),
+
+        ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
@@ -189,6 +206,8 @@ export function registerOrgTools(
         org_id: z.string().uuid().describe("Organization UUID"),
         email: z.string().email().describe("Email to invite"),
         role: z.string().optional().describe("Role for invitee"),
+
+        ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
@@ -209,6 +228,8 @@ export function registerOrgTools(
       description: "List pending invitations for an organization.",
       inputSchema: {
         org_id: z.string().uuid().describe("Organization UUID"),
+
+        ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
@@ -230,6 +251,8 @@ export function registerOrgTools(
       inputSchema: {
         org_id: z.string().uuid().describe("Organization UUID"),
         invitation_id: z.string().min(1).max(255).describe("Invitation ID"),
+
+        ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
     },
@@ -250,6 +273,8 @@ export function registerOrgTools(
       description: "Get invitation details by token. No specific scope required.",
       inputSchema: {
         token: z.string().min(1).max(500).describe("Invitation token"),
+
+        ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
@@ -270,6 +295,8 @@ export function registerOrgTools(
       description: "Accept an organization invitation by token.",
       inputSchema: {
         token: z.string().min(1).max(500).describe("Invitation token"),
+
+        ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },

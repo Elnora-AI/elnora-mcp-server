@@ -4,6 +4,7 @@ import { ElnoraApiClient } from "../services/elnora-api-client.js";
 import { RequestContext } from "../server.js";
 import { handleApiError } from "../services/error-handler.js";
 import { withGuard } from "./with-guard.js";
+import { OUTPUT_OPTIONS_SCHEMA } from "../services/response-formatter.js";
 
 export function registerFeedbackTools(
   server: McpServer,
@@ -18,6 +19,8 @@ export function registerFeedbackTools(
       inputSchema: {
         title: z.string().min(1).max(200).describe("Feedback title"),
         description: z.string().min(1).max(5000).describe("Detailed description"),
+
+        ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },

@@ -1,9 +1,12 @@
 import { RequestContext } from "../server.js";
 import { checkToolScopes, TOOL_SCOPES } from "./scope-guard.js";
 import { logToolInvocation } from "../middleware/tool-logging.js";
+import { formatToolResult } from "../services/response-formatter.js";
 
 /**
- * Wraps a tool handler with scope enforcement and invocation logging.
+ * Wraps a tool handler with scope enforcement, invocation logging, and
+ * token-efficient response formatting (compact/fields post-processing).
+ *
  * CoSAI MCP-T2 (scope enforcement) + MCP-T12 (audit logging).
  */
 export function withGuard<T extends Record<string, unknown>>(
@@ -28,6 +31,12 @@ export function withGuard<T extends Record<string, unknown>>(
 
     const isPublic = requiredScopes.length === 0;
 
+    // Extract output options before executing handler
+    const outputOptions = {
+      compact: params.compact === true,
+      fields: typeof params.fields === "string" ? params.fields : undefined,
+    };
+
     // Public tools (empty required scopes) skip auth context entirely
     if (isPublic) {
       const start = Date.now();
@@ -37,7 +46,7 @@ export function withGuard<T extends Record<string, unknown>>(
           success: !result.isError,
           durationMs: Date.now() - start,
         });
-        return result;
+        return applyOutputOptions(result, outputOptions);
       } catch (error) {
         logToolInvocation(toolName, params, "anonymous", {
           success: false,
@@ -76,7 +85,7 @@ export function withGuard<T extends Record<string, unknown>>(
         success: !result.isError,
         durationMs: Date.now() - start,
       });
-      return result;
+      return applyOutputOptions(result, outputOptions);
     } catch (error) {
       logToolInvocation(toolName, params, ctx.clientId, {
         success: false,
@@ -90,5 +99,27 @@ export function withGuard<T extends Record<string, unknown>>(
         isError: true,
       };
     }
+  };
+}
+
+/**
+ * Apply compact/fields post-processing to a successful tool result.
+ * Error responses are never modified (they're human-readable strings).
+ */
+function applyOutputOptions(
+  result: { content: { type: "text"; text: string }[]; isError?: boolean },
+  options: { compact: boolean; fields?: string },
+): { content: { type: "text"; text: string }[]; isError?: boolean } {
+  // Don't post-process errors or if no options are active
+  if (result.isError || (!options.compact && !options.fields)) {
+    return result;
+  }
+
+  return {
+    ...result,
+    content: result.content.map((c) => ({
+      ...c,
+      text: formatToolResult(c.text, options),
+    })),
   };
 }

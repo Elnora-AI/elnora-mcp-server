@@ -4,6 +4,7 @@ import { ElnoraApiClient } from "../services/elnora-api-client.js";
 import { RequestContext } from "../server.js";
 import { handleApiError } from "../services/error-handler.js";
 import { withGuard } from "./with-guard.js";
+import { OUTPUT_OPTIONS_SCHEMA } from "../services/response-formatter.js";
 
 export function registerProjectTools(
   server: McpServer,
@@ -19,6 +20,8 @@ export function registerProjectTools(
         org_id: z.string().uuid().optional().describe("Organization UUID (optional, defaults to active org)"),
         page: z.number().int().min(1).default(1).describe("Page number"),
         page_size: z.number().int().min(1).max(100).default(25).describe("Results per page"),
+
+        ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
@@ -41,6 +44,8 @@ export function registerProjectTools(
       description: "Get a single project by UUID.",
       inputSchema: {
         project_id: z.string().uuid().describe("Project UUID"),
+
+        ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
@@ -64,6 +69,8 @@ export function registerProjectTools(
         name: z.string().min(1).max(200).describe("Project name"),
         description: z.string().max(2000).optional().describe("Project description"),
         icon: z.string().max(50).optional().describe("Project icon"),
+
+        ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
@@ -89,6 +96,8 @@ export function registerProjectTools(
         name: z.string().min(1).max(200).optional().describe("New name"),
         description: z.string().max(2000).optional().describe("New description"),
         icon: z.string().max(50).optional().describe("New icon"),
+
+        ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
@@ -116,6 +125,8 @@ export function registerProjectTools(
       description: "Archive (soft-delete) a project.",
       inputSchema: {
         project_id: z.string().uuid().describe("Project UUID"),
+
+        ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
     },
@@ -136,6 +147,8 @@ export function registerProjectTools(
       description: "List members of a project.",
       inputSchema: {
         project_id: z.string().uuid().describe("Project UUID"),
+
+        ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
@@ -158,6 +171,8 @@ export function registerProjectTools(
         project_id: z.string().uuid().describe("Project UUID"),
         user_id: z.string().min(1).max(255).describe("User ID to add"),
         role: z.string().max(100).default("Member").describe("Role (default: Member)"),
+
+        ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
@@ -180,6 +195,8 @@ export function registerProjectTools(
         project_id: z.string().uuid().describe("Project UUID"),
         user_id: z.string().min(1).max(255).describe("User ID"),
         role: z.string().min(1).max(100).describe("New role"),
+
+        ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
@@ -201,6 +218,8 @@ export function registerProjectTools(
       inputSchema: {
         project_id: z.string().uuid().describe("Project UUID"),
         user_id: z.string().min(1).max(255).describe("User ID to remove"),
+
+        ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
     },
@@ -221,6 +240,8 @@ export function registerProjectTools(
       description: "Leave a project you are a member of.",
       inputSchema: {
         project_id: z.string().uuid().describe("Project UUID"),
+
+        ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
     },

@@ -50,6 +50,7 @@ export const TOOL_SCOPES: Record<string, string[]> = {
   elnora_search_tasks: ["search:read"],
   elnora_search_files: ["search:read"],
   elnora_search_all: ["search:read"],
+  elnora_search_file_content: ["search:read"],
 
   // Organizations
   elnora_list_orgs: ["orgs:read"],

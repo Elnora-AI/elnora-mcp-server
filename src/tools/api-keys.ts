@@ -4,6 +4,7 @@ import { ElnoraApiClient } from "../services/elnora-api-client.js";
 import { RequestContext } from "../server.js";
 import { handleApiError } from "../services/error-handler.js";
 import { withGuard } from "./with-guard.js";
+import { OUTPUT_OPTIONS_SCHEMA } from "../services/response-formatter.js";
 
 export function registerApiKeyTools(
   server: McpServer,
@@ -15,7 +16,9 @@ export function registerApiKeyTools(
     {
       title: "List API Keys",
       description: "List all personal API keys.",
-      inputSchema: {},
+      inputSchema: {
+        ...OUTPUT_OPTIONS_SCHEMA,
+      },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
     withGuard("elnora_list_api_keys", getContext, async () => {
@@ -36,6 +39,8 @@ export function registerApiKeyTools(
       inputSchema: {
         name: z.string().min(1).max(200).describe("Key name"),
         scopes: z.array(z.string()).optional().describe("Optional scopes"),
+
+        ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
@@ -56,6 +61,8 @@ export function registerApiKeyTools(
       description: "Revoke (delete) an API key.",
       inputSchema: {
         key_id: z.string().min(1).max(255).describe("API key ID"),
+
+        ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
     },

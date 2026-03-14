@@ -4,6 +4,7 @@ import { ElnoraApiClient } from "../services/elnora-api-client.js";
 import { RequestContext } from "../server.js";
 import { handleApiError } from "../services/error-handler.js";
 import { withGuard } from "./with-guard.js";
+import { OUTPUT_OPTIONS_SCHEMA } from "../services/response-formatter.js";
 
 export function registerFolderTools(
   server: McpServer,
@@ -18,6 +19,8 @@ export function registerFolderTools(
       inputSchema: {
         org_id: z.string().uuid().optional().describe("Organization UUID (optional, defaults to active org)"),
         project_id: z.string().uuid().describe("Project UUID"),
+
+        ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
@@ -43,6 +46,8 @@ export function registerFolderTools(
         project_id: z.string().uuid().describe("Project UUID"),
         name: z.string().min(1).max(255).describe("Folder name"),
         parent_id: z.string().uuid().optional().describe("Parent folder UUID for nesting"),
+
+        ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
@@ -66,6 +71,8 @@ export function registerFolderTools(
       inputSchema: {
         folder_id: z.string().uuid().describe("Folder UUID"),
         name: z.string().min(1).max(255).describe("New name"),
+
+        ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
@@ -87,6 +94,8 @@ export function registerFolderTools(
       inputSchema: {
         folder_id: z.string().uuid().describe("Folder UUID"),
         parent_id: z.string().uuid().optional().describe("New parent folder UUID (omit for root)"),
+
+        ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
@@ -107,6 +116,8 @@ export function registerFolderTools(
       description: "Delete a folder.",
       inputSchema: {
         folder_id: z.string().uuid().describe("Folder UUID"),
+
+        ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
     },
