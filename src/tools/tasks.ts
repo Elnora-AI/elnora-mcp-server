@@ -4,6 +4,7 @@ import { ElnoraApiClient } from "../services/elnora-api-client.js";
 import { RequestContext } from "../server.js";
 import { handleApiError } from "../services/error-handler.js";
 import { withGuard } from "./with-guard.js";
+import { OUTPUT_OPTIONS_SCHEMA } from "../services/response-formatter.js";
 
 export function registerTaskTools(
   server: McpServer,
@@ -21,6 +22,7 @@ export function registerTaskTools(
         title: z.string().max(200).optional().describe("Task title"),
         initial_message: z.string().max(50_000).optional().describe("Initial message to send"),
         context_file_ids: z.array(z.string().uuid()).optional().describe("File IDs for context"),
+        ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
@@ -67,6 +69,7 @@ export function registerTaskTools(
         status: z.string().optional().describe("Filter by status"),
         page: z.number().int().min(1).default(1).describe("Page number"),
         page_size: z.number().int().min(1).max(100).default(25).describe("Results per page"),
+        ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
@@ -90,6 +93,7 @@ export function registerTaskTools(
       description: "Get a single task by UUID.",
       inputSchema: {
         task_id: z.string().uuid().describe("Task UUID"),
+        ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
@@ -112,6 +116,7 @@ export function registerTaskTools(
         task_id: z.string().uuid().describe("Task UUID"),
         limit: z.number().int().min(1).max(100).default(50).describe("Max messages"),
         cursor: z.string().optional().describe("Cursor for pagination"),
+        ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
@@ -136,6 +141,7 @@ export function registerTaskTools(
         task_id: z.string().uuid().describe("Task UUID"),
         title: z.string().max(200).optional().describe("New title"),
         status: z.string().optional().describe("New status"),
+        ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
@@ -162,6 +168,7 @@ export function registerTaskTools(
       description: "Archive (delete) a task.",
       inputSchema: {
         task_id: z.string().uuid().describe("Task UUID"),
+        ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
     },

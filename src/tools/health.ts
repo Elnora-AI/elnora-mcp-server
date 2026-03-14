@@ -3,6 +3,7 @@ import { ElnoraApiClient } from "../services/elnora-api-client.js";
 import { RequestContext } from "../server.js";
 import { handleApiError } from "../services/error-handler.js";
 import { withGuard } from "./with-guard.js";
+import { OUTPUT_OPTIONS_SCHEMA } from "../services/response-formatter.js";
 
 export function registerHealthTools(
   server: McpServer,
@@ -14,7 +15,9 @@ export function registerHealthTools(
     {
       title: "Health Check",
       description: "Check if the Elnora platform API is reachable.",
-      inputSchema: {},
+      inputSchema: {
+        ...OUTPUT_OPTIONS_SCHEMA,
+      },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
     withGuard("elnora_health_check", getContext, async () => {

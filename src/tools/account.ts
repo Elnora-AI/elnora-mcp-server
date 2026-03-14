@@ -4,6 +4,7 @@ import { ElnoraApiClient } from "../services/elnora-api-client.js";
 import { RequestContext } from "../server.js";
 import { handleApiError } from "../services/error-handler.js";
 import { withGuard } from "./with-guard.js";
+import { OUTPUT_OPTIONS_SCHEMA } from "../services/response-formatter.js";
 
 export function registerAccountTools(
   server: McpServer,
@@ -17,6 +18,8 @@ export function registerAccountTools(
       description: "Get user account by numeric ID.",
       inputSchema: {
         user_id: z.number().int().describe("User numeric ID"),
+
+        ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
@@ -39,6 +42,8 @@ export function registerAccountTools(
         user_id: z.number().int().describe("User numeric ID"),
         first_name: z.string().max(100).optional().describe("First name"),
         last_name: z.string().max(100).optional().describe("Last name"),
+
+        ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
@@ -63,7 +68,9 @@ export function registerAccountTools(
     {
       title: "List Agreements",
       description: "List all user agreements (terms of service, etc.).",
-      inputSchema: {},
+      inputSchema: {
+        ...OUTPUT_OPTIONS_SCHEMA,
+      },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
     withGuard("elnora_list_agreements", getContext, async () => {
@@ -83,6 +90,8 @@ export function registerAccountTools(
       description: "Accept a user agreement version.",
       inputSchema: {
         document_version_id: z.string().min(1).max(255).describe("Document version ID to accept"),
+
+        ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },

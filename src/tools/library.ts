@@ -4,6 +4,7 @@ import { ElnoraApiClient } from "../services/elnora-api-client.js";
 import { RequestContext } from "../server.js";
 import { handleApiError } from "../services/error-handler.js";
 import { withGuard } from "./with-guard.js";
+import { OUTPUT_OPTIONS_SCHEMA } from "../services/response-formatter.js";
 
 export function registerLibraryTools(
   server: McpServer,
@@ -19,6 +20,8 @@ export function registerLibraryTools(
         org_id: z.string().uuid().describe("Organization UUID"),
         page: z.number().int().min(1).default(1).describe("Page number"),
         page_size: z.number().int().min(1).max(100).default(25).describe("Results per page"),
+
+        ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
@@ -39,6 +42,8 @@ export function registerLibraryTools(
       description: "List folders in the organization shared library.",
       inputSchema: {
         org_id: z.string().uuid().describe("Organization UUID"),
+
+        ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
@@ -61,6 +66,8 @@ export function registerLibraryTools(
         org_id: z.string().uuid().describe("Organization UUID"),
         name: z.string().min(1).max(255).describe("Folder name"),
         parent_id: z.string().uuid().optional().describe("Parent folder UUID"),
+
+        ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
@@ -83,6 +90,8 @@ export function registerLibraryTools(
         org_id: z.string().uuid().describe("Organization UUID"),
         folder_id: z.string().uuid().describe("Folder UUID"),
         name: z.string().min(1).max(255).describe("New name"),
+
+        ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
@@ -104,6 +113,8 @@ export function registerLibraryTools(
       inputSchema: {
         org_id: z.string().uuid().describe("Organization UUID"),
         folder_id: z.string().uuid().describe("Folder UUID"),
+
+        ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
     },

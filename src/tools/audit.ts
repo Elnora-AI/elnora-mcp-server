@@ -4,6 +4,7 @@ import { ElnoraApiClient } from "../services/elnora-api-client.js";
 import { RequestContext } from "../server.js";
 import { handleApiError } from "../services/error-handler.js";
 import { withGuard } from "./with-guard.js";
+import { OUTPUT_OPTIONS_SCHEMA } from "../services/response-formatter.js";
 
 export function registerAuditTools(
   server: McpServer,
@@ -21,6 +22,8 @@ export function registerAuditTools(
         page_size: z.number().int().min(1).max(100).default(25).describe("Results per page"),
         action: z.string().min(1).max(200).optional().describe("Filter by action type"),
         user_id: z.string().min(1).optional().describe("Filter by user ID"),
+
+        ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },

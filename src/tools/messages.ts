@@ -4,6 +4,7 @@ import { ElnoraApiClient } from "../services/elnora-api-client.js";
 import { RequestContext } from "../server.js";
 import { handleApiError } from "../services/error-handler.js";
 import { withGuard } from "./with-guard.js";
+import { OUTPUT_OPTIONS_SCHEMA } from "../services/response-formatter.js";
 
 export function registerMessageTools(
   server: McpServer,
@@ -19,6 +20,7 @@ export function registerMessageTools(
         task_id: z.string().uuid().describe("Task UUID"),
         message: z.string().min(1).max(50_000).describe("Message content (markdown supported)"),
         file_ids: z.array(z.string().uuid()).optional().describe("File IDs to attach"),
+        ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },

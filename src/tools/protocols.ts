@@ -4,6 +4,7 @@ import { ElnoraApiClient } from "../services/elnora-api-client.js";
 import { RequestContext } from "../server.js";
 import { handleApiError } from "../services/error-handler.js";
 import { withGuard } from "./with-guard.js";
+import { OUTPUT_OPTIONS_SCHEMA } from "../services/response-formatter.js";
 import { logToolInvocation } from "../middleware/tool-logging.js";
 
 export function registerProtocolTools(
@@ -20,6 +21,8 @@ export function registerProtocolTools(
         description: z.string().min(10).max(5000).describe("Protocol description"),
         title: z.string().max(200).optional().describe("Task title"),
         project_id: z.string().uuid().optional().describe("Project UUID to associate the protocol task with"),
+
+        ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },

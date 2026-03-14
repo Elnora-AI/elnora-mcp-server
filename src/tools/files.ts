@@ -5,6 +5,7 @@ import { RequestContext } from "../server.js";
 import { handleApiError } from "../services/error-handler.js";
 import { withGuard } from "./with-guard.js";
 import { CHARACTER_LIMIT } from "../constants.js";
+import { OUTPUT_OPTIONS_SCHEMA } from "../services/response-formatter.js";
 
 export function registerFileTools(
   server: McpServer,
@@ -21,6 +22,7 @@ export function registerFileTools(
         project_id: z.string().uuid().optional().describe("Filter by project UUID"),
         page: z.number().int().min(1).default(1).describe("Page number"),
         page_size: z.number().int().min(1).max(100).default(25).describe("Results per page"),
+        ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
@@ -28,7 +30,10 @@ export function registerFileTools(
       try {
         const client = getClient();
         if (org_id) client.setOrgContext(org_id);
-        const path = project_id ? `/projects/${project_id}/files` : "/files";
+        if (!project_id) {
+          return { content: [{ type: "text" as const, text: "Error: project_id is required. Use elnora_list_projects to find your project ID first." }], isError: true };
+        }
+        const path = `/projects/${project_id}/files`;
         const result = await client.get(path, { page, pageSize: page_size });
         return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
       } catch (error) {
@@ -44,6 +49,7 @@ export function registerFileTools(
       description: "Get file metadata by UUID.",
       inputSchema: {
         file_id: z.string().uuid().describe("File UUID"),
+        ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
@@ -64,6 +70,7 @@ export function registerFileTools(
       description: "Retrieve the content of a file by ID.",
       inputSchema: {
         file_id: z.string().uuid().describe("File UUID"),
+        ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
@@ -86,6 +93,7 @@ export function registerFileTools(
         file_id: z.string().uuid().describe("File UUID"),
         page: z.number().int().min(1).default(1).describe("Page number"),
         page_size: z.number().int().min(1).max(100).default(25).describe("Results per page"),
+        ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
@@ -107,6 +115,7 @@ export function registerFileTools(
       inputSchema: {
         file_id: z.string().uuid().describe("File UUID"),
         version_id: z.string().uuid().describe("Version UUID"),
+        ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
@@ -130,6 +139,7 @@ export function registerFileTools(
         name: z.string().min(1).max(255).describe("Filename"),
         content: z.string().min(1).max(CHARACTER_LIMIT).describe("File content"),
         file_type: z.string().optional().describe("MIME type (default: text/markdown)"),
+        ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
@@ -156,6 +166,7 @@ export function registerFileTools(
         name: z.string().min(1).max(255).describe("Filename"),
         folder_id: z.string().uuid().optional().describe("Folder UUID"),
         file_type: z.string().optional().describe("File type"),
+        ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
@@ -182,6 +193,7 @@ export function registerFileTools(
         file_id: z.string().uuid().describe("File UUID"),
         name: z.string().min(1).max(255).optional().describe("New name"),
         folder_id: z.string().uuid().optional().describe("New folder UUID"),
+        ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
@@ -208,6 +220,7 @@ export function registerFileTools(
       description: "Archive (delete) a file.",
       inputSchema: {
         file_id: z.string().uuid().describe("File UUID"),
+        ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
     },
@@ -228,6 +241,7 @@ export function registerFileTools(
       description: "Download a file (returns download URL or content).",
       inputSchema: {
         file_id: z.string().uuid().describe("File UUID"),
+        ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
@@ -249,6 +263,7 @@ export function registerFileTools(
       inputSchema: {
         file_id: z.string().uuid().describe("File UUID"),
         content: z.string().min(1).max(CHARACTER_LIMIT).describe("Version content"),
+        ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
@@ -270,6 +285,7 @@ export function registerFileTools(
       inputSchema: {
         file_id: z.string().uuid().describe("File UUID"),
         version_id: z.string().uuid().describe("Version UUID to restore"),
+        ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
@@ -291,6 +307,7 @@ export function registerFileTools(
       inputSchema: {
         file_id: z.string().uuid().describe("File UUID"),
         visibility: z.string().min(1).describe("Target visibility level"),
+        ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
@@ -312,6 +329,7 @@ export function registerFileTools(
       inputSchema: {
         file_id: z.string().uuid().describe("File UUID"),
         target_project_id: z.string().uuid().describe("Target project UUID"),
+        ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
@@ -333,6 +351,7 @@ export function registerFileTools(
       inputSchema: {
         file_id: z.string().uuid().describe("File UUID"),
         task_id: z.string().uuid().optional().describe("Associated task UUID"),
+        ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
@@ -355,6 +374,7 @@ export function registerFileTools(
       description: "Commit a working copy back to the file.",
       inputSchema: {
         file_id: z.string().uuid().describe("File UUID"),
+        ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
@@ -378,6 +398,7 @@ export function registerFileTools(
         file_name: z.string().min(1).max(255).describe("Filename"),
         content_type: z.string().default("application/octet-stream").describe("MIME content type"),
         file_size_bytes: z.number().int().min(1).describe("File size in bytes"),
+        ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
@@ -400,6 +421,7 @@ export function registerFileTools(
       description: "Confirm that a file upload to the presigned URL has completed.",
       inputSchema: {
         file_id: z.string().uuid().describe("File UUID from initiate_upload"),
+        ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },

@@ -4,6 +4,7 @@ import { ElnoraApiClient } from "../services/elnora-api-client.js";
 import { RequestContext } from "../server.js";
 import { handleApiError } from "../services/error-handler.js";
 import { withGuard } from "./with-guard.js";
+import { OUTPUT_OPTIONS_SCHEMA } from "../services/response-formatter.js";
 
 export function registerFlagTools(
   server: McpServer,
@@ -15,7 +16,9 @@ export function registerFlagTools(
     {
       title: "List Feature Flags",
       description: "List all global feature flags (no specific scope required).",
-      inputSchema: {},
+      inputSchema: {
+        ...OUTPUT_OPTIONS_SCHEMA,
+      },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
     withGuard("elnora_list_flags", getContext, async () => {
@@ -35,6 +38,8 @@ export function registerFlagTools(
       description: "Get a single feature flag by key (no specific scope required).",
       inputSchema: {
         key: z.string().min(1).max(200).regex(/^[\w-]+(?:\.[\w-]+)*$/).describe("Feature flag key"),
+
+        ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
