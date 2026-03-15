@@ -82,6 +82,10 @@ async function main(): Promise<void> {
 
   const app = express();
 
+  // Trust one proxy hop (ALB) so X-Forwarded-For is used for req.ip
+  // Required for express-rate-limit to identify clients correctly behind ALB
+  app.set("trust proxy", 1);
+
   // --- Security middleware (CoSAI MCP-T7) ---
   app.use(corsMiddleware(config));
   app.use(express.json({ limit: "1mb" })); // Payload size limit (CoSAI MCP-T10)
