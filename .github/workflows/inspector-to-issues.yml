@@ -1,0 +1,208 @@
+name: Create Issues from AWS Inspector Findings
+
+on:
+  schedule:
+    # Run daily at 6 AM UTC
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  issues: write
+
+jobs:
+  create-issues:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::551507900153:role/elnora-github-actions-deploy
+          aws-region: us-east-1
+
+      - name: Fetch Inspector Findings and Create Issues
+        uses: actions/github-script@v8
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { execSync } = require('child_process');
+
+            // Fetch active Inspector findings using AWS CLI
+            let findings;
+            try {
+              const filterJson = JSON.stringify({
+                findingStatus: [{ comparison: "EQUALS", value: "ACTIVE" }]
+              });
+              const cmd = `aws inspector2 list-findings --filter-criteria '${filterJson}' --max-results 100`;
+              const result = execSync(cmd, { encoding: 'utf-8', maxBuffer: 10 * 1024 * 1024 });
+              findings = JSON.parse(result).findings || [];
+            } catch (error) {
+              console.error('Failed to fetch Inspector findings:', error.message);
+              try {
+                const result = execSync(
+                  "aws inspector2 list-findings --max-results 100",
+                  { encoding: 'utf-8', maxBuffer: 10 * 1024 * 1024 }
+                );
+                const allFindings = JSON.parse(result).findings || [];
+                findings = allFindings.filter(f => f.status === 'ACTIVE');
+              } catch (retryError) {
+                console.error('Retry also failed:', retryError.message);
+                return;
+              }
+            }
+
+            console.log(`Found ${findings.length} active Inspector findings`);
+
+            if (findings.length === 0) {
+              console.log('No active findings to process');
+              return;
+            }
+
+            // Get existing issues to avoid duplicates
+            const { data: existingIssues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: 'Source: Vulnerability Scan',
+              state: 'all',
+              per_page: 100
+            });
+
+            // Extract vulnerability identifiers from existing issue titles
+            // Supports CVE (CVE-YYYY-NNNNN), GHSA (GHSA-xxxx-xxxx-xxxx), and INSPECTOR IDs
+            // All identifiers are normalized to uppercase for case-insensitive comparison
+            const existingIdentifiers = existingIssues.map(issue => {
+              // Try CVE first
+              const cveMatch = issue.title.match(/CVE-\d{4}-\d+/i);
+              if (cveMatch) return cveMatch[0].toUpperCase();
+
+              // Try GHSA (GitHub Security Advisory)
+              const ghsaMatch = issue.title.match(/GHSA-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}/i);
+              if (ghsaMatch) return ghsaMatch[0].toUpperCase();
+
+              // Try INSPECTOR ID
+              const inspectorMatch = issue.title.match(/INSPECTOR-[a-f0-9]{12}/i);
+              if (inspectorMatch) return inspectorMatch[0].toUpperCase();
+
+              return null;
+            }).filter(Boolean);
+
+            console.log(`Found ${existingIdentifiers.length} existing vulnerability issues`);
+            console.log('Existing identifiers:', existingIdentifiers.slice(0, 10).join(', ') + (existingIdentifiers.length > 10 ? '...' : ''));
+
+            let createdCount = 0;
+            let skippedCount = 0;
+
+            for (const finding of findings) {
+              // Extract vulnerability identifier (CVE, GHSA, or fallback to Inspector ID)
+              // Normalize to uppercase for case-insensitive comparison with existing issues
+              const rawVulnId = finding.packageVulnerabilityDetails?.vulnerabilityId ||
+                          finding.title?.match(/CVE-\d{4}-\d+/i)?.[0] ||
+                          finding.title?.match(/GHSA-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}/i)?.[0] ||
+                          `INSPECTOR-${finding.findingArn?.split('/').pop()?.substring(0, 12)}`;
+              const vulnId = rawVulnId.toUpperCase();
+
+              const severity = (finding.severity || 'UNKNOWN').toUpperCase();
+
+              // Skip INFORMATIONAL findings
+              if (severity === 'INFORMATIONAL' || severity === 'UNTRIAGED') {
+                console.log(`Skipping ${vulnId} - ${severity} severity`);
+                skippedCount++;
+                continue;
+              }
+
+              // Skip if issue already exists
+              if (existingIdentifiers.includes(vulnId)) {
+                console.log(`Skipping ${vulnId} - issue already exists`);
+                skippedCount++;
+                continue;
+              }
+
+              // Determine SLA based on severity
+              const slaMap = {
+                'CRITICAL': '30 days',
+                'HIGH': '30 days',
+                'MEDIUM': '60 days',
+                'LOW': '90 days'
+              };
+              const sla = slaMap[severity] || '90 days';
+
+              const severityLabelMap = {
+                'CRITICAL': 'Severity: Critical',
+                'HIGH': 'Severity: High',
+                'MEDIUM': 'Severity: Medium',
+                'LOW': 'Severity: Low'
+              };
+              const severityLabel = severityLabelMap[severity] || 'Severity: Low';
+
+              // Extract details
+              const resource = finding.resources?.[0] || {};
+              const resourceType = resource.type || 'Unknown';
+              const resourceId = resource.id || 'Unknown';
+
+              const pkgDetails = finding.packageVulnerabilityDetails || {};
+              const packageName = pkgDetails.vulnerablePackages?.[0]?.name || 'Unknown package';
+              const packageVersion = pkgDetails.vulnerablePackages?.[0]?.version || 'Unknown';
+              const fixedVersion = pkgDetails.vulnerablePackages?.[0]?.fixedInVersion || 'No fix available';
+              const packageManager = pkgDetails.vulnerablePackages?.[0]?.packageManager || 'Unknown';
+
+              const cvssScore = pkgDetails.cvss?.[0]?.baseScore || finding.inspectorScore || 'N/A';
+              const title = finding.title || `${vulnId} vulnerability`;
+              const description = finding.description || 'No description available';
+
+              const issueBody = `## Vulnerability Details
+
+            | Field | Value |
+            |-------|-------|
+            | **Identifier** | ${vulnId} |
+            | **Severity** | ${severity} |
+            | **CVSS Score** | ${cvssScore} |
+            | **SLA** | ${sla} |
+            | **Package** | ${packageName} (${packageManager}) |
+            | **Vulnerable Version** | ${packageVersion} |
+            | **Fixed Version** | ${fixedVersion} |
+            | **Resource Type** | ${resourceType} |
+            | **Resource ID** | \`${resourceId.substring(0, 80)}...\` |
+
+            ## Summary
+
+            ${title}
+
+            ## Description
+
+            ${description.substring(0, 2000)}${description.length > 2000 ? '...' : ''}
+
+            ## Remediation
+
+            ${fixedVersion !== 'No fix available'
+              ? `Update \`${packageName}\` to version \`${fixedVersion}\` or later.`
+              : 'No fix is currently available. Monitor for updates.'}
+
+            ## Links
+
+            - [AWS Inspector Console](https://us-east-1.console.aws.amazon.com/inspector/v2/home?region=us-east-1#/findings)
+
+            ---
+
+            *Auto-generated from AWS Inspector on ${new Date().toISOString().split('T')[0]}*
+            *Source: AWS Inspector (ECR container scan)*`;
+
+              const issueTitle = `[${severity}] ${vulnId}: ${title.substring(0, 80)}`;
+
+              try {
+                await github.rest.issues.create({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  title: issueTitle,
+                  body: issueBody,
+                  labels: ['Source: Vulnerability Scan', 'Flag: security', severityLabel]
+                });
+
+                console.log(`Created issue for ${vulnId}: ${packageName}`);
+                createdCount++;
+                existingIdentifiers.push(vulnId);
+              } catch (error) {
+                console.error(`Failed to create issue for ${vulnId}: ${error.message}`);
+              }
+            }
+
+            console.log(`\nSummary: Created ${createdCount} issues, skipped ${skippedCount}`);
