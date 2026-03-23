@@ -50,6 +50,9 @@
     "ioredis": "^5.10.0",
     "zod": "^4.3.6"
   },
+  "overrides": {
+    "hono": "^4.12.7"
+  },
   "devDependencies": {
     "@types/express": "^5.0.0",
     "@types/node": "^22.12.0",
