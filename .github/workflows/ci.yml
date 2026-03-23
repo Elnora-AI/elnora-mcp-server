@@ -18,8 +18,8 @@ jobs:
     name: Build and Test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: npm
@@ -30,7 +30,7 @@ jobs:
       - name: Generate SBOM (CoSAI MCP-T11)
         run: npm sbom --sbom-format cyclonedx > sbom.json || echo '{"bomFormat":"CycloneDX","specVersion":"1.4","components":[]}' > sbom.json
       - name: Upload SBOM artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: sbom
           path: sbom.json
