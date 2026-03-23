@@ -203,7 +203,7 @@ jobs:
                   repo: context.repo.repo,
                   title: issueTitle,
                   body: issueBody,
-                  labels: ['Source: Vulnerability Scan', 'Flag: security', severityLabel]
+                  labels: ['Source: Vulnerability Scan', 'Flag: security', 'Repo: elnora-mcp-server', severityLabel]
                 });
 
                 console.log(`Created issue for ${vulnId}: ${packageName}`);
