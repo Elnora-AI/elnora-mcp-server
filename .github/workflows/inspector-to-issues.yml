@@ -51,7 +51,16 @@ jobs:
               }
             }
 
-            console.log(`Found ${findings.length} active Inspector findings`);
+            console.log(`Found ${findings.length} active Inspector findings (all repos)`);
+
+            // Filter to only findings for this repo's ECR image
+            const ECR_REPO_FILTER = 'elnora-mcp-server';
+            findings = findings.filter(f => {
+              const resourceId = f.resources?.[0]?.id || '';
+              return resourceId.includes(ECR_REPO_FILTER);
+            });
+
+            console.log(`Found ${findings.length} findings for ${ECR_REPO_FILTER}`);
 
             if (findings.length === 0) {
               console.log('No active findings to process');
