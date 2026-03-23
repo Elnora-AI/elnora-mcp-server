@@ -30,7 +30,7 @@ jobs:
       - name: Generate SBOM (CoSAI MCP-T11)
         run: npm sbom --sbom-format cyclonedx > sbom.json || echo '{"bomFormat":"CycloneDX","specVersion":"1.4","components":[]}' > sbom.json
       - name: Upload SBOM artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: sbom
           path: sbom.json
