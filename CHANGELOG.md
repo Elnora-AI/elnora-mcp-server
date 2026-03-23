@@ -5,6 +5,15 @@ All notable changes to the Elnora MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.9.1](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v0.9.0...mcp-server-v0.9.1) (2026-03-23)
+
+
+### Bug Fixes
+
+* enable trust proxy for ALB compatibility ([#35](https://github.com/Elnora-AI/elnora-mcp-server/issues/35)) ([c942b08](https://github.com/Elnora-AI/elnora-mcp-server/commit/c942b08c36f3d072e29b141983586024c1f68027))
+* filter Inspector findings to MCP server ECR repo only ([#65](https://github.com/Elnora-AI/elnora-mcp-server/issues/65)) ([6d5f773](https://github.com/Elnora-AI/elnora-mcp-server/commit/6d5f7733ba79650e930d838d5e92b98f9f739240))
+* resolve 13 AWS Inspector vulnerabilities ([#66](https://github.com/Elnora-AI/elnora-mcp-server/issues/66)) ([4117764](https://github.com/Elnora-AI/elnora-mcp-server/commit/41177647e774315c6f2c88c0aa3b5a5816e3acc5))
+
 ## [0.9.0](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v0.8.0...mcp-server-v0.9.0) (2026-03-14)
 
 
