@@ -23,7 +23,7 @@ jobs:
       RELEASE_TAG: ${{ github.event.release.tag_name }}
       EVENT_NAME: ${{ github.event_name }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Guard manual dispatch to main branch
         if: github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/main'
         run: |
