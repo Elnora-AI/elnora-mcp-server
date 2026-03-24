@@ -5,6 +5,13 @@ All notable changes to the Elnora MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.10.0](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v0.9.1...mcp-server-v0.10.0) (2026-03-24)
+
+
+### Features
+
+* upgrade from Node 22 to Node 24 LTS ([#68](https://github.com/Elnora-AI/elnora-mcp-server/issues/68)) ([d47ae00](https://github.com/Elnora-AI/elnora-mcp-server/commit/d47ae004384426a53e7f03be8cef961de923d1af))
+
 ## [0.9.1](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v0.9.0...mcp-server-v0.9.1) (2026-03-23)
 
 
