@@ -51,7 +51,9 @@
     "zod": "^4.3.6"
   },
   "overrides": {
-    "hono": "^4.12.7"
+    "hono": "^4.12.7",
+    "tar": "^7.5.11",
+    "minimatch": "^10.2.4"
   },
   "devDependencies": {
     "@types/express": "^5.0.0",
