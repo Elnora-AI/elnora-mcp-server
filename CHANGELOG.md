@@ -5,6 +5,13 @@ All notable changes to the Elnora MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.10.2](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v0.10.1...mcp-server-v0.10.2) (2026-03-26)
+
+
+### Bug Fixes
+
+* upgrade picomatch to 4.0.4 for CVE-2026-33672 ([#76](https://github.com/Elnora-AI/elnora-mcp-server/issues/76)) ([1ad0824](https://github.com/Elnora-AI/elnora-mcp-server/commit/1ad0824fe465f67b7de1dcde0db1d6b9eb5163e0))
+
 ## [0.10.1](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v0.10.0...mcp-server-v0.10.1) (2026-03-24)
 
 
