@@ -15,7 +15,7 @@ export function registerTaskTools(
     "elnora_create_task",
     {
       title: "Create Task",
-      description: "Create a new task (conversation thread). Each task is a chat where you send messages and receive AI responses.",
+      description: "Create a new task (conversation thread). Each task is a chat where you send messages and the AI processes asynchronously. If initial_message is provided, it is sent but the AI response is NOT returned — poll elnora_get_task_messages every 5-10s until the last message has role 'assistant' with metadata.status 'completed'.",
       inputSchema: {
         org_id: z.string().uuid().optional().describe("Organization UUID (optional, defaults to active org)"),
         project_id: z.string().uuid().optional().describe("Project UUID (optional)"),
@@ -111,7 +111,7 @@ export function registerTaskTools(
     "elnora_get_task_messages",
     {
       title: "Get Task Messages",
-      description: "Get message history for a task.",
+      description: "Get message history for a task. This is the ONLY way to retrieve AI responses via MCP — after sending a message or generating a protocol, poll this tool every 5-10s. The AI response is ready when the last message has role 'assistant' and metadata contains '\"status\":\"completed\"'. If the last message still has role 'user', the AI is still processing.",
       inputSchema: {
         task_id: z.string().uuid().describe("Task UUID"),
         limit: z.number().int().min(1).max(100).default(50).describe("Max messages"),

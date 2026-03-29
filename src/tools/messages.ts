@@ -15,7 +15,7 @@ export function registerMessageTools(
     "elnora_send_message",
     {
       title: "Send Message",
-      description: "Send a message to a task and receive the AI response. May take 30-120s for complex requests.",
+      description: "Send a message to a task. Returns the created user message immediately — the AI processes asynchronously. To get the AI response, poll elnora_get_task_messages until the last message has role 'assistant' with metadata.status 'completed'. Poll every 5-10s, timeout after 5 min.",
       inputSchema: {
         task_id: z.string().uuid().describe("Task UUID"),
         message: z.string().min(1).max(50_000).describe("Message content (markdown supported)"),
