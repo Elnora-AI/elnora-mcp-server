@@ -5,6 +5,13 @@ All notable changes to the Elnora MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.10.5](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v0.10.4...mcp-server-v0.10.5) (2026-03-30)
+
+
+### Bug Fixes
+
+* persist OAuth client registrations in Redis (ELN-570) ([#96](https://github.com/Elnora-AI/elnora-mcp-server/issues/96)) ([1f04d9d](https://github.com/Elnora-AI/elnora-mcp-server/commit/1f04d9d050f7ea2d886f7a08d332bb21d8a107cb))
+
 ## [0.10.4](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v0.10.3...mcp-server-v0.10.4) (2026-03-27)
 
 
