@@ -10,7 +10,6 @@ import {
 } from "@modelcontextprotocol/sdk/shared/auth.js";
 import { AuthInfo } from "@modelcontextprotocol/sdk/server/auth/types.js";
 import { InvalidTokenError, ServerError } from "@modelcontextprotocol/sdk/server/auth/errors.js";
-import { InMemoryClientsStore } from "./clients-store.js";
 import { TokenStore } from "./token-store.js";
 import { ElnoraConfig, TokenRecord } from "../types.js";
 import { logAuthEvent } from "../middleware/tool-logging.js";
@@ -44,14 +43,14 @@ import {
 const VALIDATION_CACHE_TTL_SECONDS = 30;
 
 export class ElnoraOAuthProvider implements OAuthServerProvider {
-  private _clientsStore: InMemoryClientsStore;
+  private _clientsStore: OAuthRegisteredClientsStore;
   private store: TokenStore;
   private config: ElnoraConfig;
 
-  constructor(config: ElnoraConfig, store: TokenStore) {
+  constructor(config: ElnoraConfig, store: TokenStore, clientsStore: OAuthRegisteredClientsStore) {
     this.config = config;
     this.store = store;
-    this._clientsStore = new InMemoryClientsStore();
+    this._clientsStore = clientsStore;
   }
 
   /** Headers required by the platform's token validation endpoint */
@@ -396,7 +395,7 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
     logAuthEvent("platform_callback_completed", session.clientId);
 
     // Validate redirect_uri against registered client before redirecting (prevents open redirect)
-    const clientRecord = this._clientsStore.getClient(session.clientId);
+    const clientRecord = await this._clientsStore.getClient(session.clientId);
     if (!clientRecord?.redirect_uris?.includes(session.redirectUri)) {
       logAuthEvent("redirect_uri_not_registered", session.clientId, { redirectUri: session.redirectUri });
       throw new Error("Redirect URI not registered for client");

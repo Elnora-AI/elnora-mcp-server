@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ElnoraOAuthProvider } from "../../src/auth/provider.js";
 import { InMemoryTokenStore } from "../../src/auth/in-memory-token-store.js";
+import { InMemoryClientsStore } from "../../src/auth/clients-store.js";
 import type { ElnoraConfig } from "../../src/types.js";
 
 vi.mock("axios", () => ({
@@ -28,7 +29,7 @@ const config: ElnoraConfig = {
 /** Helper: run the full authorize → callback → exchange flow to get tokens */
 async function issueTokens(provider: ElnoraOAuthProvider) {
   // Register client in the store so handlePlatformCallback can validate redirect_uri
-  const registered = provider.clientsStore.registerClient({
+  const registered = await provider.clientsStore.registerClient!({
     redirect_uris: ["http://localhost:3000/callback"],
   });
   const client = { client_id: registered.client_id, redirect_uris: ["http://localhost:3000/callback"] };
@@ -60,7 +61,7 @@ describe("ElnoraOAuthProvider — advanced flows", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    provider = new ElnoraOAuthProvider(config, new InMemoryTokenStore());
+    provider = new ElnoraOAuthProvider(config, new InMemoryTokenStore(), new InMemoryClientsStore());
   });
 
   describe("verifyAccessToken", () => {
@@ -224,7 +225,7 @@ describe("ElnoraOAuthProvider — advanced flows", () => {
 
   describe("handlePlatformCallback", () => {
     it("throws on callback replay (same code used twice)", async () => {
-      const registered = provider.clientsStore.registerClient({
+      const registered = await provider.clientsStore.registerClient!({
         redirect_uris: ["http://localhost:3000/callback"],
       });
       const client = { client_id: registered.client_id, redirect_uris: ["http://localhost:3000/callback"] };
