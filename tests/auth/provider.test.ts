@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ElnoraOAuthProvider } from "../../src/auth/provider.js";
 import { InMemoryTokenStore } from "../../src/auth/in-memory-token-store.js";
+import { InMemoryClientsStore } from "../../src/auth/clients-store.js";
 import type { ElnoraConfig } from "../../src/types.js";
 
 vi.mock("axios", () => ({
@@ -30,7 +31,7 @@ describe("ElnoraOAuthProvider", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    provider = new ElnoraOAuthProvider(config, new InMemoryTokenStore());
+    provider = new ElnoraOAuthProvider(config, new InMemoryTokenStore(), new InMemoryClientsStore());
   });
 
   describe("clientsStore", () => {
@@ -96,7 +97,7 @@ describe("ElnoraOAuthProvider", () => {
 
   describe("exchangeAuthorizationCode", () => {
     it("exchanges code for tokens via platform and issues MCP tokens", async () => {
-      const registered = provider.clientsStore.registerClient({
+      const registered = await provider.clientsStore.registerClient!({
         redirect_uris: ["http://localhost:3000/callback"],
       });
       const client = { client_id: registered.client_id, redirect_uris: ["http://localhost:3000/callback"] };
@@ -137,7 +138,7 @@ describe("ElnoraOAuthProvider", () => {
     });
 
     it("throws when platform callback not completed", async () => {
-      const registered = provider.clientsStore.registerClient({
+      const registered = await provider.clientsStore.registerClient!({
         redirect_uris: ["http://localhost:3000/callback"],
       });
       const client = { client_id: registered.client_id, redirect_uris: ["http://localhost:3000/callback"] };
@@ -159,7 +160,7 @@ describe("ElnoraOAuthProvider", () => {
     });
 
     it("throws when redirect_uri does not match authorization request", async () => {
-      const registered = provider.clientsStore.registerClient({
+      const registered = await provider.clientsStore.registerClient!({
         redirect_uris: ["http://localhost:3000/callback"],
       });
       const client = { client_id: registered.client_id, redirect_uris: ["http://localhost:3000/callback"] };
@@ -252,7 +253,7 @@ describe("ElnoraOAuthProvider", () => {
     });
 
     it("throws on state mismatch (CSRF protection)", async () => {
-      const registered = provider.clientsStore.registerClient({
+      const registered = await provider.clientsStore.registerClient!({
         redirect_uris: ["http://localhost:3000/callback"],
       });
       const client = { client_id: registered.client_id, redirect_uris: ["http://localhost:3000/callback"] };
@@ -274,7 +275,7 @@ describe("ElnoraOAuthProvider", () => {
     });
 
     it("throws on empty platform code", async () => {
-      const registered = provider.clientsStore.registerClient({
+      const registered = await provider.clientsStore.registerClient!({
         redirect_uris: ["http://localhost:3000/callback"],
       });
       const client = { client_id: registered.client_id, redirect_uris: ["http://localhost:3000/callback"] };
@@ -296,7 +297,7 @@ describe("ElnoraOAuthProvider", () => {
     });
 
     it("builds redirect URL with code and state", async () => {
-      const registered = provider.clientsStore.registerClient({
+      const registered = await provider.clientsStore.registerClient!({
         redirect_uris: ["http://localhost:3000/callback"],
       });
       const client = { client_id: registered.client_id, redirect_uris: ["http://localhost:3000/callback"] };

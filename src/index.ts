@@ -12,6 +12,7 @@ import { corsMiddleware } from "./middleware/cors.js";
 import { SUPPORTED_SCOPES, ALL_SCOPES } from "./constants.js";
 import { logAuthEvent } from "./middleware/tool-logging.js";
 import { RedisTokenStore } from "./auth/redis-token-store.js";
+import { RedisClientsStore } from "./auth/redis-clients-store.js";
 import { TokenStore } from "./auth/token-store.js";
 import rateLimit from "express-rate-limit";
 import axios from "axios";
@@ -75,10 +76,14 @@ async function main(): Promise<void> {
     }
   }
 
-  // --- Redis token store (fail-closed — server won't start without Redis) ---
+  // --- Redis stores (fail-closed — server won't start without Redis) ---
   const store: TokenStore = new RedisTokenStore(config.redisUrl);
   await store.ping();
   console.error("Redis token store connected");
+
+  const clientsStore = new RedisClientsStore(config.redisUrl);
+  await clientsStore.ping();
+  console.error("Redis clients store connected");
 
   const app = express();
 
@@ -112,7 +117,7 @@ async function main(): Promise<void> {
   });
 
   // --- OAuth 2.1 Authorization Server ---
-  const provider = new ElnoraOAuthProvider(config, store);
+  const provider = new ElnoraOAuthProvider(config, store, clientsStore);
   const issuerUrl = new URL(config.publicUrl);
   const mcpServerUrl = new URL(`${config.publicUrl}/mcp`);
 
@@ -335,6 +340,7 @@ async function main(): Promise<void> {
   const gracefulShutdown = async (signal: string) => {
     console.error(`${signal} received — shutting down gracefully`);
     httpServer.close(async () => {
+      await clientsStore.disconnect();
       await store.disconnect();
       process.exit(0);
     });
