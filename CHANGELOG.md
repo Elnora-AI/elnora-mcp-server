@@ -5,6 +5,13 @@ All notable changes to the Elnora MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.11.0](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v0.10.6...mcp-server-v0.11.0) (2026-03-31)
+
+
+### Features
+
+* consume platform refresh tokens for 30-day MCP sessions (ELN-513) ([#100](https://github.com/Elnora-AI/elnora-mcp-server/issues/100)) ([a04e6c6](https://github.com/Elnora-AI/elnora-mcp-server/commit/a04e6c697abd87e0043448770211ab09e15b7a03))
+
 ## [0.10.6](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v0.10.5...mcp-server-v0.10.6) (2026-03-31)
 
 
