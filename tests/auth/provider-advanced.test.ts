@@ -49,7 +49,7 @@ async function issueTokens(provider: ElnoraOAuthProvider) {
   await provider.handlePlatformCallback(mcpCode, "platform-auth-code", platformState);
 
   vi.mocked(axios.post).mockResolvedValueOnce({
-    data: { access_token: "platform-token-123" },
+    data: { access_token: "platform-token-123", refresh_token: "platform-refresh-token-123" },
   });
 
   const tokens = await provider.exchangeAuthorizationCode(client, mcpCode, undefined, "http://localhost:3000/callback");
@@ -323,6 +323,88 @@ describe("ElnoraOAuthProvider — advanced flows", () => {
       vi.mocked(axios.post).mockResolvedValueOnce({ data: { valid: true } });
       const authInfo = await provider.verifyAccessToken(tokens.access_token);
       expect(authInfo.token).toBe(tokens.access_token);
+    });
+  });
+
+  describe("platform token refresh", () => {
+    it("refreshes expired platform token when validation returns valid:false", async () => {
+      const { tokens } = await issueTokens(provider);
+
+      // Platform validation returns valid:false (token expired)
+      vi.mocked(axios.post).mockResolvedValueOnce({ data: { valid: false } });
+      // Platform refresh succeeds with new tokens
+      vi.mocked(axios.post).mockResolvedValueOnce({
+        data: { access_token: "new-platform-token", refresh_token: "new-platform-refresh-token" },
+      });
+
+      // Should succeed — platform token was refreshed transparently
+      const authInfo = await provider.verifyAccessToken(tokens.access_token);
+      expect(authInfo.token).toBe(tokens.access_token);
+      expect(authInfo.clientId).toBeDefined();
+    });
+
+    it("refreshes expired platform token when validation returns 401", async () => {
+      const { tokens } = await issueTokens(provider);
+
+      // Platform validation returns 401
+      const axiosError = new Error("Unauthorized") as Error & { response: { status: number } };
+      (axiosError as Record<string, unknown>).response = { status: 401 };
+      (axiosError as Record<string, unknown>).isAxiosError = true;
+      vi.mocked(axios.post).mockRejectedValueOnce(axiosError);
+      // Platform refresh succeeds
+      vi.mocked(axios.post).mockResolvedValueOnce({
+        data: { access_token: "new-platform-token", refresh_token: "new-platform-refresh-token" },
+      });
+
+      const authInfo = await provider.verifyAccessToken(tokens.access_token);
+      expect(authInfo.token).toBe(tokens.access_token);
+    });
+
+    it("revokes when platform token refresh fails", async () => {
+      const { tokens } = await issueTokens(provider);
+
+      // Platform validation returns valid:false
+      vi.mocked(axios.post).mockResolvedValueOnce({ data: { valid: false } });
+      // Platform refresh also fails
+      vi.mocked(axios.post).mockRejectedValueOnce(new Error("refresh failed"));
+
+      await expect(provider.verifyAccessToken(tokens.access_token)).rejects.toThrow(
+        "Underlying platform token revoked",
+      );
+    });
+
+    it("uses refreshed platform token on subsequent validation", async () => {
+      const { tokens } = await issueTokens(provider);
+
+      // First call: platform token expired, refresh succeeds
+      vi.mocked(axios.post).mockResolvedValueOnce({ data: { valid: false } });
+      vi.mocked(axios.post).mockResolvedValueOnce({
+        data: { access_token: "new-platform-token", refresh_token: "new-refresh" },
+      });
+
+      await provider.verifyAccessToken(tokens.access_token);
+
+      // Second call: should use cached validation (no platform call needed)
+      const authInfo = await provider.verifyAccessToken(tokens.access_token);
+      expect(authInfo.token).toBe(tokens.access_token);
+    });
+
+    it("getPlatformToken returns refreshed token after refresh", async () => {
+      const { tokens } = await issueTokens(provider);
+
+      // Original platform token
+      expect(await provider.getPlatformToken(tokens.access_token)).toBe("platform-token-123");
+
+      // Platform token expired, refresh succeeds
+      vi.mocked(axios.post).mockResolvedValueOnce({ data: { valid: false } });
+      vi.mocked(axios.post).mockResolvedValueOnce({
+        data: { access_token: "refreshed-platform-token", refresh_token: "new-refresh" },
+      });
+
+      await provider.verifyAccessToken(tokens.access_token);
+
+      // Should return the refreshed token
+      expect(await provider.getPlatformToken(tokens.access_token)).toBe("refreshed-platform-token");
     });
   });
 });
