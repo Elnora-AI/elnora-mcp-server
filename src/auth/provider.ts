@@ -42,6 +42,14 @@ import {
 /** TTL for platform token validation cache (seconds) */
 const VALIDATION_CACHE_TTL_SECONDS = 30;
 
+/** Extract a safe error message from Axios errors without leaking request body (which contains secrets). */
+function safeErrorMessage(error: unknown): string {
+  if (axios.isAxiosError(error)) {
+    return `${error.response?.status ?? "network"}: ${error.message}`;
+  }
+  return error instanceof Error ? error.message : "Unknown error";
+}
+
 export class ElnoraOAuthProvider implements OAuthServerProvider {
   private _clientsStore: OAuthRegisteredClientsStore;
   private store: TokenStore;
@@ -155,8 +163,9 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
     // If the platform exchange fails transiently, the session survives so the user
     // can retry without restarting the full auth flow.
     let platformToken: string;
+    let platformRefreshToken: string | undefined;
     try {
-      const response = await axios.post<{ access_token: string }>(
+      const response = await axios.post<{ access_token: string; refresh_token?: string }>(
         this.config.tokenExchangeUrl,
         {
           grant_type: "authorization_code",
@@ -167,8 +176,9 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
         { timeout: REQUEST_TIMEOUT_MS },
       );
       platformToken = response.data.access_token;
+      platformRefreshToken = response.data.refresh_token;
     } catch (error) {
-      logAuthEvent("platform_token_exchange_failed", client.client_id, { error: String(error) });
+      logAuthEvent("platform_token_exchange_failed", client.client_id, { error: safeErrorMessage(error) });
       throw new Error("Failed to exchange authorization code with platform");
     }
 
@@ -176,7 +186,7 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
     await this.store.deleteSession(authorizationCode);
 
     // Issue MCP tokens (separate from platform token — CoSAI MCP-T1)
-    return this.issueTokens(client.client_id, session.scopes, platformToken, resource?.toString());
+    return this.issueTokens(client.client_id, session.scopes, platformToken, resource?.toString(), platformRefreshToken);
   }
 
   async exchangeRefreshToken(
@@ -232,7 +242,7 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
         logAuthEvent("refresh_platform_token_revoked", client.client_id);
         throw new Error("Underlying platform token has been revoked");
       }
-      logAuthEvent("refresh_platform_validation_error", client.client_id, { error: String(error) });
+      logAuthEvent("refresh_platform_validation_error", client.client_id, { error: safeErrorMessage(error) });
       throw new Error("Platform token validation unavailable — please retry");
     }
 
@@ -252,6 +262,7 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
       scopes || record.scopes,
       record.platformToken,
       resource?.toString() || record.resource,
+      record.platformRefreshToken,
     );
   }
 
@@ -289,10 +300,7 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
         { timeout: REQUEST_TIMEOUT_MS, headers: this.validationHeaders },
       );
       if (!validation.data.valid) {
-        await this.store.deleteTokenRecord(token);
-        await this.store.deleteValidationCache(token);
-        await this.store.deleteRefreshIndex(record.refreshToken);
-        throw new InvalidTokenError("Underlying platform token revoked");
+        return this.attemptRefreshOrRevoke(token, record);
       }
       // Cache successful validation
       await this.store.setValidationCache(token, Math.floor(Date.now() / 1000), VALIDATION_CACHE_TTL_SECONDS);
@@ -302,14 +310,11 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
         throw error;
       }
       if (axios.isAxiosError(error) && error.response?.status === 401) {
-        await this.store.deleteTokenRecord(token);
-        await this.store.deleteValidationCache(token);
-        await this.store.deleteRefreshIndex(record.refreshToken);
-        throw new InvalidTokenError("Underlying platform token revoked");
+        return this.attemptRefreshOrRevoke(token, record);
       }
       // Network errors — fail-closed for security (SOC 2 / pharma revocation requirements).
       // Reject the request and force retry on next call.
-      logAuthEvent("platform_validation_network_error", record.clientId, { error: String(error) });
+      logAuthEvent("platform_validation_network_error", record.clientId, { error: safeErrorMessage(error) });
       throw new ServerError("Platform token validation unavailable — please retry");
     }
 
@@ -410,11 +415,72 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
     return redirectUrl.toString();
   }
 
+  /**
+   * Attempt to refresh the platform token, update the stored record, and return AuthInfo.
+   * If refresh fails or no refresh token exists, revokes all tokens and throws.
+   */
+  private async attemptRefreshOrRevoke(token: string, record: TokenRecord): Promise<AuthInfo> {
+    if (record.platformRefreshToken) {
+      const refreshed = await this.refreshPlatformToken(record.platformRefreshToken, record.clientId);
+      if (refreshed) {
+        const updatedRecord: TokenRecord = {
+          ...record,
+          platformToken: refreshed.accessToken,
+          platformRefreshToken: refreshed.refreshToken || record.platformRefreshToken,
+        };
+        await this.store.setTokenRecord(token, updatedRecord, REFRESH_TOKEN_TTL_SECONDS);
+        await this.store.setValidationCache(token, Math.floor(Date.now() / 1000), VALIDATION_CACHE_TTL_SECONDS);
+        logAuthEvent("platform_token_refreshed", record.clientId);
+        return {
+          token,
+          clientId: record.clientId,
+          scopes: record.scopes,
+          expiresAt: record.expiresAt,
+          resource: record.resource ? new URL(record.resource) : undefined,
+        };
+      }
+    }
+    await this.store.deleteTokenRecord(token);
+    await this.store.deleteValidationCache(token);
+    await this.store.deleteRefreshIndex(record.refreshToken);
+    throw new InvalidTokenError("Underlying platform token revoked");
+  }
+
+  /**
+   * Attempt to refresh an expired platform token using the platform's refresh token.
+   * Returns new tokens on success, or null if refresh fails (caller falls back to revocation).
+   */
+  private async refreshPlatformToken(
+    platformRefreshToken: string,
+    clientId: string,
+  ): Promise<{ accessToken: string; refreshToken?: string } | null> {
+    try {
+      const response = await axios.post<{ access_token: string; refresh_token?: string }>(
+        this.config.tokenExchangeUrl,
+        {
+          grant_type: "refresh_token",
+          refresh_token: platformRefreshToken,
+          client_id: this.config.platformClientId,
+          client_secret: this.config.platformClientSecret,
+        },
+        { timeout: REQUEST_TIMEOUT_MS },
+      );
+      return {
+        accessToken: response.data.access_token,
+        refreshToken: response.data.refresh_token,
+      };
+    } catch (error) {
+      logAuthEvent("platform_token_refresh_failed", clientId, { error: safeErrorMessage(error) });
+      return null;
+    }
+  }
+
   private async issueTokens(
     clientId: string,
     scopes: string[],
     platformToken: string,
     resource?: string,
+    platformRefreshToken?: string,
   ): Promise<OAuthTokens> {
     const accessToken = crypto.randomBytes(32).toString("base64url");
     const refreshToken = crypto.randomBytes(32).toString("base64url");
@@ -424,6 +490,7 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
       accessToken,
       refreshToken,
       platformToken,
+      platformRefreshToken,
       clientId,
       scopes,
       resource,

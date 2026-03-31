@@ -37,6 +37,7 @@ export interface TokenRecord {
   accessToken: string;
   refreshToken: string;
   platformToken: string;
+  platformRefreshToken?: string;
   clientId: string;
   scopes: string[];
   resource?: string;
