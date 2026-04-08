@@ -201,9 +201,7 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          model: claude-sonnet-4-6-20250514
-          timeout_minutes: 20
-          direct_prompt: |
+          prompt: |
             You are an automated vulnerability remediation agent for container
             image vulnerabilities in the Elnora MCP Server.
 
@@ -263,5 +261,6 @@ jobs:
             - Tests MUST pass before creating a PR.
             - Use `gh pr create` to create the PR.
           claude_args: |
-            --allowedTools "Read,Write,Edit,Glob,Grep,Bash(npm:*),Bash(npx:*),Bash(node:*),Bash(docker:*),Bash(git:*),Bash(gh:*),Bash(cat:*),Bash(echo:*)"
+            --model claude-sonnet-4-6-20250514
             --max-turns 40
+            --allowedTools "Read,Write,Edit,Glob,Grep,Bash(npm:*),Bash(npx:*),Bash(node:*),Bash(docker:*),Bash(git:*),Bash(gh:*),Bash(cat:*),Bash(echo:*)"
