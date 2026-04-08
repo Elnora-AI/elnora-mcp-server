@@ -85,11 +85,17 @@ jobs:
               per_page: 100
             });
 
-            const existingIds = existingIssues.map(issue => {
+            const existingIds = [];
+            const vulnToIssueNumber = {};
+            for (const issue of existingIssues) {
               const cve = issue.title.match(/CVE-\d{4}-\d+/i);
               const ghsa = issue.title.match(/GHSA-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}/i);
-              return cve ? cve[0].toUpperCase() : (ghsa ? ghsa[0].toUpperCase() : null);
-            }).filter(Boolean);
+              const vid = cve ? cve[0].toUpperCase() : (ghsa ? ghsa[0].toUpperCase() : null);
+              if (vid) {
+                existingIds.push(vid);
+                vulnToIssueNumber[vid] = issue.number;
+              }
+            }
 
             const severityMap = { 'CRITICAL': 'Critical', 'HIGH': 'High', 'MEDIUM': 'Medium', 'LOW': 'Low' };
             const slaMap = { 'CRITICAL': '30 days', 'HIGH': '30 days', 'MEDIUM': '60 days', 'LOW': '90 days' };
@@ -118,7 +124,7 @@ jobs:
                 const sla = slaMap[severity] || '90 days';
 
                 try {
-                  await github.rest.issues.create({
+                  const { data: newIssue } = await github.rest.issues.create({
                     owner: context.repo.owner,
                     repo: context.repo.repo,
                     title: `[${severity}] ${vulnId}: ${title.substring(0, 80)}`,
@@ -147,8 +153,9 @@ jobs:
                     labels: ['Source: Vulnerability Scan', 'Flag: security', 'Repo: elnora-mcp-server',
                       `Severity: ${severityMap[severity] || 'Low'}`]
                   });
-                  console.log(`Created issue for ${vulnId}`);
+                  console.log(`Created issue #${newIssue.number} for ${vulnId}`);
                   existingIds.push(vulnId);
+                  vulnToIssueNumber[vulnId] = newIssue.number;
                 } catch (e) {
                   console.error(`Failed to create issue for ${vulnId}: ${e.message}`);
                 }
@@ -162,6 +169,7 @@ jobs:
                 fixedVersion: pkg?.fixedInVersion || null,
                 manager: pkg?.packageManager || 'OS',
                 title: finding.title || vulnId,
+                githubIssueNumber: vulnToIssueNumber[vulnId] || null,
                 description: (finding.description || '').substring(0, 500)
               });
             }
@@ -254,6 +262,11 @@ jobs:
             Include: Fixed table, Skipped table, Risk Assessment, and overall
             "ready-to-merge" or "needs-review" label. The description must be
             clear enough for a human reviewer to make a quick merge decision.
+
+            Also include a "Closes" section with `Fixes #NNN` for each fixed
+            vulnerability, using the `githubIssueNumber` from the findings data.
+            This auto-closes GitHub issues (and synced Linear issues) on merge.
+            Only include issue numbers for vulnerabilities actually fixed.
 
             ## Important Rules
 
