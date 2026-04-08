@@ -166,6 +166,22 @@ jobs:
               });
             }
 
+            // ── Check if there's an existing open auto-fix PR ──
+            const { data: openPRs } = await github.rest.pulls.list({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              per_page: 100
+            });
+            const hasExistingFixPR = openPRs.some(pr =>
+              pr.head.ref.startsWith('fix/container-vuln-remediation-')
+            );
+            if (hasExistingFixPR) {
+              console.log('An open container-vuln-remediation PR already exists — skipping Claude');
+              core.setOutput('has_findings', 'false');
+              return;
+            }
+
             fs.writeFileSync('/tmp/inspector-findings.json', JSON.stringify(findingSummaries, null, 2));
             core.setOutput('has_findings', 'true');
             core.setOutput('finding_count', String(findingSummaries.length));

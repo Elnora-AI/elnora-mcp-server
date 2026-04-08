@@ -2,8 +2,10 @@ name: Auto-Fix Vulnerabilities
 
 on:
   schedule:
-    # Run every 4 hours
-    - cron: '0 */4 * * *'
+    # Run every 30 minutes for fast response to new alerts.
+    # Note: there is no native Actions trigger for Dependabot alerts
+    # (dependabot_alert is webhook-only), so we poll instead.
+    - cron: '*/30 * * * *'
   workflow_dispatch:
     inputs:
       dry_run:
@@ -149,6 +151,23 @@ jobs:
                 manifest, cvss,
                 description: description.substring(0, 500)
               });
+            }
+
+            // ── Check if there's an existing open auto-fix PR ──
+            // If a fix PR already exists, skip Claude to avoid duplicate work and API cost
+            const { data: openPRs } = await github.rest.pulls.list({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              per_page: 100
+            });
+            const hasExistingFixPR = openPRs.some(pr =>
+              pr.head.ref.startsWith('fix/vuln-remediation-')
+            );
+            if (hasExistingFixPR) {
+              console.log('An open vuln-remediation PR already exists — skipping Claude to avoid duplicates');
+              core.setOutput('has_alerts', 'false');
+              return;
             }
 
             // Write alert data for Claude to read
