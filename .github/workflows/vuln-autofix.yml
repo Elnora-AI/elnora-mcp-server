@@ -80,11 +80,18 @@ jobs:
               per_page: 100
             });
 
-            const existingIds = existingIssues.map(issue => {
+            // Build map of vuln ID → issue number for existing issues
+            const existingIds = [];
+            const vulnToIssueNumber = {};
+            for (const issue of existingIssues) {
               const cve = issue.title.match(/CVE-\d{4}-\d+/);
               const ghsa = issue.title.match(/GHSA-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}/);
-              return cve ? cve[0] : (ghsa ? ghsa[0] : null);
-            }).filter(Boolean);
+              const vulnId = cve ? cve[0] : (ghsa ? ghsa[0] : null);
+              if (vulnId) {
+                existingIds.push(vulnId);
+                vulnToIssueNumber[vulnId] = issue.number;
+              }
+            }
 
             // ── Create issues for new alerts + build summary for Claude ──
             const severityMap = { 'critical': 'Critical', 'high': 'High', 'medium': 'Medium', 'low': 'Low' };
@@ -110,7 +117,7 @@ jobs:
                 const sevLabel = `Severity: ${severityMap[severity] || 'Low'}`;
                 const sla = slaMap[severity] || '90 days';
                 try {
-                  await github.rest.issues.create({
+                  const { data: newIssue } = await github.rest.issues.create({
                     owner: context.repo.owner,
                     repo: context.repo.repo,
                     title: `[${severity.toUpperCase()}] ${id}: ${summary.substring(0, 80)}`,
@@ -139,17 +146,19 @@ jobs:
                     ].join('\n'),
                     labels: ['Source: Vulnerability Scan', 'Flag: security', 'Repo: elnora-mcp-server', sevLabel]
                   });
-                  console.log(`Created issue for ${id}`);
+                  console.log(`Created issue #${newIssue.number} for ${id}`);
                   existingIds.push(id);
+                  vulnToIssueNumber[id] = newIssue.number;
                 } catch (e) {
                   console.error(`Failed to create issue for ${id}: ${e.message}`);
                 }
               }
 
-              // Build summary object for Claude prompt
+              // Build summary object for Claude prompt (include issue number for PR cross-refs)
               alertSummaries.push({
                 id, severity, pkg, ecosystem, vulnRange, patchedVer, summary,
                 manifest, cvss,
+                githubIssueNumber: vulnToIssueNumber[id] || vulnToIssueNumber[cve] || vulnToIssueNumber[ghsa] || null,
                 description: description.substring(0, 500)
               });
             }
@@ -246,6 +255,17 @@ jobs:
 
                  ## Test Results
                  - Paste the test output summary
+
+                 ## Closes
+
+                 For each FIXED vulnerability, add a "Fixes #NNN" line using the
+                 `githubIssueNumber` field from the alert data. This auto-closes
+                 the GitHub issue (and its synced Linear issue) when the PR merges.
+                 Example:
+                 Fixes #117
+                 Fixes #118
+                 Only include issue numbers for vulnerabilities that were actually
+                 fixed in this PR — not for skipped ones.
 
                - Add label `security` to the PR
             6. If there are no fixable alerts (all are no-fix-available), do NOT create
