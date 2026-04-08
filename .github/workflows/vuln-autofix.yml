@@ -262,6 +262,6 @@ jobs:
             - The PR description must be clear enough for a human reviewer to
               understand what changed and why, and to make a merge decision quickly.
           claude_args: |
-            --model claude-sonnet-4-6-20250514
+            --model claude-sonnet-4-6
             --max-turns 60
             --allowedTools "Read,Write,Edit,Glob,Grep,Bash(npm:*),Bash(npx:*),Bash(node:*),Bash(git:*),Bash(gh:*),Bash(cat:*),Bash(echo:*)"
