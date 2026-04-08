@@ -1,10 +1,11 @@
-name: Create Issues from AWS Inspector Findings
+# DEPRECATED: Issue creation is now handled by inspector-autofix.yml
+# which also applies automated fixes. Kept as manual-only backup.
+name: Create Issues from AWS Inspector Findings (DEPRECATED)
 
 on:
-  schedule:
-    # Run daily at 6 AM UTC
-    - cron: '0 6 * * *'
-  workflow_dispatch:
+  # Schedule disabled — inspector-autofix.yml handles detection + fix now
+  # - cron: '0 6 * * *'
+  workflow_dispatch: # Manual-only backup for emergencies
 
 permissions:
   id-token: write
