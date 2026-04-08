@@ -2,10 +2,10 @@ name: Auto-Fix Vulnerabilities
 
 on:
   schedule:
-    # Run every 30 minutes for fast response to new alerts.
-    # Note: there is no native Actions trigger for Dependabot alerts
-    # (dependabot_alert is webhook-only), so we poll instead.
-    - cron: '*/30 * * * *'
+    # Run every 4 hours. There is no native Actions trigger for Dependabot
+    # alerts (dependabot_alert is webhook-only), so we poll instead.
+    # Adjust frequency based on observed Actions minutes usage.
+    - cron: '0 */4 * * *'
   workflow_dispatch:
     inputs:
       dry_run:
