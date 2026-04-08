@@ -1,0 +1,251 @@
+name: Auto-Fix Inspector Vulnerabilities
+
+on:
+  schedule:
+    # Run every 4 hours (offset from vuln-autofix by 2h)
+    - cron: '0 2,6,10,14,18,22 * * *'
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: write
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: inspector-autofix
+  cancel-in-progress: false
+
+jobs:
+  detect-and-fix:
+    name: Detect & Fix Inspector Findings
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: arn:aws:iam::551507900153:role/elnora-github-actions-deploy
+          aws-region: us-east-1
+
+      - name: Fetch Inspector findings and create tracking issues
+        id: findings
+        uses: actions/github-script@v8
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { execSync } = require('child_process');
+            const fs = require('fs');
+
+            // ── Fetch active Inspector findings for our ECR image ──
+            let findings = [];
+            try {
+              const filterJson = JSON.stringify({
+                findingStatus: [{ comparison: "EQUALS", value: "ACTIVE" }]
+              });
+              const result = execSync(
+                `aws inspector2 list-findings --filter-criteria '${filterJson}' --max-results 100`,
+                { encoding: 'utf-8', maxBuffer: 10 * 1024 * 1024 }
+              );
+              findings = (JSON.parse(result).findings || [])
+                .filter(f => (f.resources?.[0]?.id || '').includes('elnora-mcp-server'));
+            } catch (e) {
+              console.error('Failed to fetch findings:', e.message);
+              try {
+                const result = execSync(
+                  'aws inspector2 list-findings --max-results 100',
+                  { encoding: 'utf-8', maxBuffer: 10 * 1024 * 1024 }
+                );
+                findings = (JSON.parse(result).findings || [])
+                  .filter(f => f.status === 'ACTIVE')
+                  .filter(f => (f.resources?.[0]?.id || '').includes('elnora-mcp-server'));
+              } catch (retryErr) {
+                console.error('Retry failed:', retryErr.message);
+                core.setOutput('has_findings', 'false');
+                return;
+              }
+            }
+
+            console.log(`Found ${findings.length} active Inspector findings for elnora-mcp-server`);
+
+            if (findings.length === 0) {
+              core.setOutput('has_findings', 'false');
+              return;
+            }
+
+            // ── Get existing issues to avoid duplicates ──
+            const { data: existingIssues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: 'Source: Vulnerability Scan',
+              state: 'all',
+              per_page: 100
+            });
+
+            const existingIds = existingIssues.map(issue => {
+              const cve = issue.title.match(/CVE-\d{4}-\d+/i);
+              const ghsa = issue.title.match(/GHSA-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}/i);
+              return cve ? cve[0].toUpperCase() : (ghsa ? ghsa[0].toUpperCase() : null);
+            }).filter(Boolean);
+
+            const severityMap = { 'CRITICAL': 'Critical', 'HIGH': 'High', 'MEDIUM': 'Medium', 'LOW': 'Low' };
+            const slaMap = { 'CRITICAL': '30 days', 'HIGH': '30 days', 'MEDIUM': '60 days', 'LOW': '90 days' };
+            const findingSummaries = [];
+
+            for (const finding of findings) {
+              const rawId = finding.packageVulnerabilityDetails?.vulnerabilityId ||
+                finding.title?.match(/CVE-\d{4}-\d+/i)?.[0] ||
+                `INSPECTOR-${finding.findingArn?.split('/').pop()?.substring(0, 12)}`;
+              const vulnId = rawId.toUpperCase();
+              const severity = (finding.severity || 'UNKNOWN').toUpperCase();
+
+              if (severity === 'INFORMATIONAL' || severity === 'UNTRIAGED') continue;
+
+              // Create issue if new (syncs to Linear automatically)
+              if (!existingIds.includes(vulnId)) {
+                const pkg = finding.packageVulnerabilityDetails?.vulnerablePackages?.[0];
+                const pkgName = pkg?.name || 'unknown';
+                const pkgVersion = pkg?.version || 'unknown';
+                const fixedVersion = pkg?.fixedInVersion || 'No fix available';
+                const pkgManager = pkg?.packageManager || 'OS';
+                const title = finding.title || vulnId;
+                const description = finding.description || 'No description';
+                const cvss = finding.packageVulnerabilityDetails?.cvss?.[0]?.baseScore ||
+                  finding.inspectorScore || 'N/A';
+                const sla = slaMap[severity] || '90 days';
+
+                try {
+                  await github.rest.issues.create({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    title: `[${severity}] ${vulnId}: ${title.substring(0, 80)}`,
+                    body: [
+                      `## Vulnerability Details`,
+                      `| Field | Value |`,
+                      `|-------|-------|`,
+                      `| **Identifier** | ${vulnId} |`,
+                      `| **Severity** | ${severity} |`,
+                      `| **CVSS** | ${cvss} |`,
+                      `| **SLA** | ${sla} |`,
+                      `| **Package** | ${pkgName} (${pkgManager}) |`,
+                      `| **Vulnerable Version** | ${pkgVersion} |`,
+                      `| **Fixed Version** | ${fixedVersion} |`,
+                      ``,
+                      `## Description`,
+                      description.substring(0, 2000),
+                      ``,
+                      `## Source`,
+                      `AWS Inspector (ECR container scan)`,
+                      ``,
+                      `---`,
+                      `*Auto-generated by inspector-autofix on ${new Date().toISOString().split('T')[0]}*`,
+                      `*This issue will sync to Linear for triage and remediation tracking.*`
+                    ].join('\n'),
+                    labels: ['Source: Vulnerability Scan', 'Flag: security', 'Repo: elnora-mcp-server',
+                      `Severity: ${severityMap[severity] || 'Low'}`]
+                  });
+                  console.log(`Created issue for ${vulnId}`);
+                  existingIds.push(vulnId);
+                } catch (e) {
+                  console.error(`Failed to create issue for ${vulnId}: ${e.message}`);
+                }
+              }
+
+              const pkg = finding.packageVulnerabilityDetails?.vulnerablePackages?.[0];
+              findingSummaries.push({
+                id: vulnId, severity,
+                pkg: pkg?.name || 'unknown',
+                version: pkg?.version || 'unknown',
+                fixedVersion: pkg?.fixedInVersion || null,
+                manager: pkg?.packageManager || 'OS',
+                title: finding.title || vulnId,
+                description: (finding.description || '').substring(0, 500)
+              });
+            }
+
+            fs.writeFileSync('/tmp/inspector-findings.json', JSON.stringify(findingSummaries, null, 2));
+            core.setOutput('has_findings', 'true');
+            core.setOutput('finding_count', String(findingSummaries.length));
+
+      - uses: actions/setup-node@v6
+        if: steps.findings.outputs.has_findings == 'true'
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        if: steps.findings.outputs.has_findings == 'true'
+        run: npm ci
+
+      - name: Claude Code Auto-Fix (Inspector)
+        if: steps.findings.outputs.has_findings == 'true'
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          model: claude-sonnet-4-6-20250514
+          timeout_minutes: 20
+          direct_prompt: |
+            You are an automated vulnerability remediation agent for container
+            image vulnerabilities in the Elnora MCP Server.
+
+            ## Context
+
+            This is a Node.js app running in a `node:24-slim` Docker image
+            (Debian-based). AWS Inspector found vulnerabilities in OS-level
+            packages inside the container image.
+
+            Read /tmp/inspector-findings.json for the findings.
+
+            ## Decision Framework
+
+            Container image vulnerabilities fall into two categories:
+
+            1. **OS package with fix available**: The fix comes from rebuilding
+               the Docker image with `--no-cache` to pull the latest base image
+               and packages. Check the Dockerfile — if it already uses the latest
+               `node:24-slim`, the fix depends on Debian publishing the patched
+               package. In that case, treat as "no fix yet".
+
+            2. **OS package with no fix available**: These are risk acceptance
+               candidates. The container runs as non-root user `node`, doesn't
+               process untrusted packages, and doesn't mount filesystems. Most
+               OS-level vulns have attack preconditions that don't exist in this
+               container.
+
+            ## Steps
+
+            1. Read /tmp/inspector-findings.json
+            2. Read the Dockerfile to understand the base image and build process
+            3. For each finding, determine if a fix is possible:
+               - If the base image can be updated to a newer tag, update it
+               - If OS packages can be pinned to fixed versions, add them to
+                 the Dockerfile
+               - If no fix exists, note it as risk acceptance candidate
+            4. If any Docker changes were made:
+               - Run `npm run build` and `npm test` to verify the app still works
+               - Create a branch `fix/container-vuln-remediation-<date>`
+               - Create a PR with a summary table of findings and actions taken
+               - Add label `security` to the PR
+            5. If all findings are no-fix-available:
+               - Do NOT create a PR
+               - Output a summary noting each finding and why it's a risk
+                 acceptance candidate (attack preconditions not present, package
+                 not used at runtime, etc.)
+
+            ## PR Description Format
+
+            Include: Fixed table, Skipped table, Risk Assessment, and overall
+            "ready-to-merge" or "needs-review" label. The description must be
+            clear enough for a human reviewer to make a quick merge decision.
+
+            ## Important Rules
+
+            - Only modify Dockerfile and related build files — not application code.
+            - Tests MUST pass before creating a PR.
+            - Use `gh pr create` to create the PR.
+          claude_args: |
+            --allowedTools "Read,Write,Edit,Glob,Grep,Bash(npm:*),Bash(npx:*),Bash(node:*),Bash(docker:*),Bash(git:*),Bash(gh:*),Bash(cat:*),Bash(echo:*)"
+            --max-turns 40
