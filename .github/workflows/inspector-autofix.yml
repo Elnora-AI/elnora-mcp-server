@@ -261,6 +261,6 @@ jobs:
             - Tests MUST pass before creating a PR.
             - Use `gh pr create` to create the PR.
           claude_args: |
-            --model claude-sonnet-4-6-20250514
+            --model claude-sonnet-4-6
             --max-turns 40
             --allowedTools "Read,Write,Edit,Glob,Grep,Bash(npm:*),Bash(npx:*),Bash(node:*),Bash(docker:*),Bash(git:*),Bash(gh:*),Bash(cat:*),Bash(echo:*)"
