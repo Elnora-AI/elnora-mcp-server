@@ -5,6 +5,15 @@ All notable changes to the Elnora MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.12.2](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v0.12.1...mcp-server-v0.12.2) (2026-04-08)
+
+
+### Bug Fixes
+
+* **ci:** add GitHub issue cross-references to auto-fix PRs ([#132](https://github.com/Elnora-AI/elnora-mcp-server/issues/132)) ([e2fd917](https://github.com/Elnora-AI/elnora-mcp-server/commit/e2fd91790b715ac1b774c59ac4d5179fa59d10f5))
+* **ci:** use correct model ID for claude-code-action ([#127](https://github.com/Elnora-AI/elnora-mcp-server/issues/127)) ([cbc249b](https://github.com/Elnora-AI/elnora-mcp-server/commit/cbc249bfc3610f162efb9fec2e0d00e85cd09ea6))
+* **deps:** automated vulnerability remediation 2026-04-08 ([#131](https://github.com/Elnora-AI/elnora-mcp-server/issues/131)) ([35bb647](https://github.com/Elnora-AI/elnora-mcp-server/commit/35bb647ad7f9ac6010eb6948a74ce9d112feb76b))
+
 ## [0.12.1](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v0.12.0...mcp-server-v0.12.1) (2026-04-08)
 
 
