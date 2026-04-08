@@ -5,6 +5,13 @@ All notable changes to the Elnora MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.11.1](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v0.11.0...mcp-server-v0.11.1) (2026-04-08)
+
+
+### Bug Fixes
+
+* **deps:** patch vite to &gt;=8.0.5 for SEC-304, SEC-305, SEC-306 ([#112](https://github.com/Elnora-AI/elnora-mcp-server/issues/112)) ([15b5b8e](https://github.com/Elnora-AI/elnora-mcp-server/commit/15b5b8eb394470c0fb42908f8b49be8080a00581))
+
 ## [0.11.0](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v0.10.6...mcp-server-v0.11.0) (2026-03-31)
 
 
