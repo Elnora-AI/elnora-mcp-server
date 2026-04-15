@@ -267,7 +267,6 @@ jobs:
                  Only include issue numbers for vulnerabilities that were actually
                  fixed in this PR — not for skipped ones.
 
-               - Add label `security` to the PR
             6. If there are no fixable alerts (all are no-fix-available), do NOT create
                a PR. Instead, just output a summary of what was found.
 

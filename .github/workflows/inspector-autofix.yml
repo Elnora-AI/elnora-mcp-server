@@ -250,7 +250,6 @@ jobs:
                - Run `npm run build` and `npm test` to verify the app still works
                - Create a branch `fix/container-vuln-remediation-<date>`
                - Create a PR with a summary table of findings and actions taken
-               - Add label `security` to the PR
             5. If all findings are no-fix-available:
                - Do NOT create a PR
                - Output a summary noting each finding and why it's a risk
