@@ -22,7 +22,7 @@ jobs:
           aws-region: us-east-1
 
       - name: Fetch Inspector Findings and Create Issues
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |

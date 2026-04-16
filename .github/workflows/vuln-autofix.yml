@@ -41,7 +41,7 @@ jobs:
 
       - name: Fetch Dependabot alerts and create tracking issues
         id: alerts
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         env:
           DEPENDABOT_TOKEN: ${{ secrets.DEPENDABOT_PAT }}
         with:
