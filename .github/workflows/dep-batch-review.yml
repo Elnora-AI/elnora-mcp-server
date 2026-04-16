@@ -86,8 +86,18 @@ jobs:
             }
 
             console.log(`Found ${eligible.length} eligible Dependabot PRs`);
+
+            // ── Guard: skip if an open batch PR already exists ──
+            const hasExistingBatchPR = prs.some(pr =>
+              pr.head.ref.startsWith('chore/dep-batch-')
+            );
+            if (hasExistingBatchPR) {
+              console.log('An open dep-batch PR already exists — skipping to avoid duplicates');
+              core.setOutput('has_prs', 'false');
+              return;
+            }
+
             fs.writeFileSync('/tmp/dep-prs.json', JSON.stringify(eligible, null, 2));
-            core.setOutput('count', String(eligible.length));
             core.setOutput('has_prs', eligible.length > 0 ? 'true' : 'false');
 
       # ─────────────────────────────────────────────────────────
@@ -166,7 +176,7 @@ jobs:
                ### Rationale
                - Changelog summary: <key entries>
                - Codebase impact: <files using the package, affected APIs>
-               - CI gates: build ✓ / test ✓ (or specific failures)
+               - CI gates: lint ✓ / build ✓ / test ✓ (or specific failures; lint skipped if repo has no lint script)
                - Transitive/peer notes: <if any>
 
                ### Recommendation
@@ -175,9 +185,12 @@ jobs:
                ```
 
                Find any existing comment with the marker
-               `<!-- claude-dep-review:sticky -->` via
-               `gh api /repos/${OWNER}/${REPO}/issues/<num>/comments`
-               and PATCH it if found, POST if not.
+               `<!-- claude-dep-review:sticky -->`. To check, list comments
+               on the PR using `gh api repos/{owner}/{repo}/issues/<num>/comments`
+               where you derive owner/repo from `git remote get-url origin` or
+               by running `gh repo view --json owner,name`. If a comment with
+               the marker exists, PATCH it (update in place). If not, POST a
+               new one.
 
             8. **Apply a verdict label** to the PR:
                - `auto-review: safe`
@@ -233,7 +246,7 @@ jobs:
                  |----|---------|-----|-----|------------------------------|
 
                  ## Verification
-                 - build ✓ / test ✓ (paste summary)
+                 - lint ✓ / build ✓ / test ✓ (paste summary; lint skipped if not available)
                  - npm audit summary
 
                  ## How to Merge
