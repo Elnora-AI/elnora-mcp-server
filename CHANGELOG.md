@@ -5,6 +5,21 @@ All notable changes to the Elnora MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.13.0](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v0.12.3...mcp-server-v0.13.0) (2026-04-16)
+
+
+### Features
+
+* **ci:** batch safe Dependabot updates twice weekly ([#157](https://github.com/Elnora-AI/elnora-mcp-server/issues/157)) ([5733de8](https://github.com/Elnora-AI/elnora-mcp-server/commit/5733de8d06555868ef5fdd5576534d914e479b00))
+
+
+### Bug Fixes
+
+* **ci:** add id-token permission for dep-batch-review OIDC auth ([#159](https://github.com/Elnora-AI/elnora-mcp-server/issues/159)) ([efd52e8](https://github.com/Elnora-AI/elnora-mcp-server/commit/efd52e8b2b03569b3e2fdb24b5b63bace1592f64))
+* **deps:** automated vulnerability remediation 2026-04-15 ([#150](https://github.com/Elnora-AI/elnora-mcp-server/issues/150)) ([ec2d80f](https://github.com/Elnora-AI/elnora-mcp-server/commit/ec2d80f7e16b70f7dbed7613f9fc5fd74228d89a))
+* **deps:** automated vulnerability remediation 2026-04-15 ([#153](https://github.com/Elnora-AI/elnora-mcp-server/issues/153)) ([d89b99b](https://github.com/Elnora-AI/elnora-mcp-server/commit/d89b99b5b50e2b43e4da46099be2dc7961454c4b))
+* **deps:** automated vulnerability remediation 2026-04-16 ([#156](https://github.com/Elnora-AI/elnora-mcp-server/issues/156)) ([233d577](https://github.com/Elnora-AI/elnora-mcp-server/commit/233d577bd96db60b6ff93da62d44bac666d5cb15)), closes [#155](https://github.com/Elnora-AI/elnora-mcp-server/issues/155)
+
 ## [0.12.3](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v0.12.2...mcp-server-v0.12.3) (2026-04-15)
 
 
