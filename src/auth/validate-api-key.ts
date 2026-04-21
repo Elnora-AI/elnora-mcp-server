@@ -6,8 +6,22 @@ import { logAuthEvent } from "../middleware/tool-logging.js";
 
 const CACHE_TTL_SECONDS = 90;
 
-function hashApiKey(apiKey: string): string {
-  return crypto.createHash("sha256").update(apiKey).digest("hex");
+/**
+ * Derives a deterministic, irreversible cache key from a credential string.
+ *
+ * NOT a password hash — that would need a slow KDF (bcrypt/argon2) with a
+ * per-entry salt, which breaks the two properties we need here:
+ *   1. Deterministic: the same credential must map to the same cache key so
+ *      a lookup on the second request finds the first request's entry.
+ *   2. Fast: this runs on every inbound request; a slow KDF would dominate
+ *      request latency.
+ *
+ * The purpose is to avoid persisting the raw credential in the cache store.
+ * Credentials are 40+ characters of cryptographic randomness, so a rainbow
+ * table attack against sha256 is computationally infeasible at this length.
+ */
+function deriveCacheKey(credential: string): string {
+  return crypto.createHash("sha256").update(credential).digest("hex");
 }
 
 /**
@@ -28,7 +42,7 @@ export async function validateApiKey(
   config: ElnoraConfig,
   store: Pick<TokenStore, "getApiKeyValidation" | "setApiKeyValidation">,
 ): Promise<{ userId: string } | null> {
-  const keyHash = hashApiKey(apiKey);
+  const keyHash = deriveCacheKey(apiKey);
 
   try {
     const cached = await store.getApiKeyValidation(keyHash);
