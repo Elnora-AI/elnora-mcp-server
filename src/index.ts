@@ -14,8 +14,8 @@ import { logAuthEvent } from "./middleware/tool-logging.js";
 import { RedisTokenStore } from "./auth/redis-token-store.js";
 import { RedisClientsStore } from "./auth/redis-clients-store.js";
 import { TokenStore } from "./auth/token-store.js";
+import { validateApiKey } from "./auth/validate-api-key.js";
 import rateLimit from "express-rate-limit";
-import axios from "axios";
 
 function requireEnv(name: string): string {
   const value = process.env[name];
@@ -38,33 +38,6 @@ function loadConfig(): ElnoraConfig {
     mcpServiceKey: requireEnv("ELNORA_MCP_SERVICE_KEY"),
     redisUrl: requireEnv("REDIS_URL"),
   };
-}
-
-/**
- * Validate an API key against the Elnora platform.
- * Returns the platform-assigned user identifier on success, or null on failure.
- * The platform is the sole authority — no local format checks gate access.
- */
-async function validateApiKeyWithPlatform(
-  apiKey: string,
-  config: ElnoraConfig,
-): Promise<{ userId: string } | null> {
-  try {
-    const validation = await axios.post(
-      config.tokenValidationUrl,
-      { token: apiKey },
-      { timeout: 10_000, headers: { "X-Service-Key": config.mcpServiceKey } },
-    );
-    // Backend may return userId (camelCase, .NET default) or user_id (snake_case).
-    const userId = validation.data.user_id ?? validation.data.userId;
-    if (validation.data.valid && userId) {
-      return { userId: String(userId) };
-    }
-    return null;
-  } catch (err) {
-    logAuthEvent("api_key_validation_error", "unknown", { error: err instanceof Error ? err.message : "Unknown error" });
-    return null;
-  }
 }
 
 async function main(): Promise<void> {
@@ -228,7 +201,7 @@ async function main(): Promise<void> {
     }
 
     // Validate against the platform (CoSAI MCP-T7)
-    const result = await validateApiKeyWithPlatform(apiKey, config);
+    const result = await validateApiKey(apiKey, config, store);
 
     if (!result) {
       logAuthEvent("api_key_rejected", "unknown");
