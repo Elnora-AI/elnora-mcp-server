@@ -164,6 +164,13 @@ export class ElnoraApiClient {
     });
   }
 
+  async patch<T = unknown>(path: string, body?: unknown): Promise<T> {
+    return this.withRetry(async () => {
+      const response = await this.client.patch<T>(path, body, { headers: this.orgHeaders });
+      return response.data;
+    });
+  }
+
   async del<T = unknown>(path: string): Promise<T> {
     return this.withRetry(async () => {
       const response = await this.client.delete<T>(path, { headers: this.orgHeaders });

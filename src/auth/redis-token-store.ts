@@ -7,6 +7,7 @@ const PREFIX_SESSION = "elnora:mcp:session:";
 const PREFIX_TOKEN = "elnora:mcp:token:";
 const PREFIX_REFRESH = "elnora:mcp:refresh:";
 const PREFIX_VCACHE = "elnora:mcp:vcache:";
+const PREFIX_APIKEY_VCACHE = "elnora:mcp:apikey-vcache:";
 
 /**
  * Lua script for atomic session update (read-modify-write).
@@ -40,6 +41,7 @@ return 1
  * - elnora:mcp:token:{accessToken}      → JSON TokenRecord (30 day TTL)
  * - elnora:mcp:refresh:{refreshToken}   → accessToken (30 day TTL)
  * - elnora:mcp:vcache:{accessToken}     → epoch seconds (30 sec TTL)
+ * - elnora:mcp:apikey-vcache:{keyHash}  → JSON { userId } (90 sec TTL)
  *
  * Tokens used as key suffixes are base64url-encoded crypto.randomBytes(32).
  * Redis is in a private VPC with TLS + password auth; key enumeration
@@ -128,6 +130,31 @@ export class RedisTokenStore implements TokenStore {
 
   async deleteValidationCache(accessToken: string): Promise<void> {
     await this.redis.del(`${PREFIX_VCACHE}${accessToken}`);
+  }
+
+  // --- API-key validation cache ---
+  async getApiKeyValidation(keyHash: string): Promise<{ userId: string } | undefined> {
+    const data = await this.redis.get(`${PREFIX_APIKEY_VCACHE}${keyHash}`);
+    if (!data) return undefined;
+    try {
+      return JSON.parse(data) as { userId: string };
+    } catch {
+      // Malformed cache entry — ignore and force re-validation.
+      return undefined;
+    }
+  }
+
+  async setApiKeyValidation(keyHash: string, data: { userId: string }, ttlSeconds: number): Promise<void> {
+    await this.redis.set(
+      `${PREFIX_APIKEY_VCACHE}${keyHash}`,
+      JSON.stringify(data),
+      "EX",
+      ttlSeconds,
+    );
+  }
+
+  async deleteApiKeyValidation(keyHash: string): Promise<void> {
+    await this.redis.del(`${PREFIX_APIKEY_VCACHE}${keyHash}`);
   }
 
   // --- Lifecycle ---
