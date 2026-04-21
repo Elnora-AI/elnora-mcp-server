@@ -12,22 +12,22 @@ export function registerLibraryTools(
   getContext: () => RequestContext,
 ): void {
   server.registerTool(
-    "elnora_list_library_files",
+    "elnora_library_files",
     {
-      title: "List Library Files",
-      description: "List files in the organization shared library.",
+      title: "elnora_library_files",
+      description: "List files in the organization library",
       inputSchema: {
-        org_id: z.string().uuid().describe("Organization UUID"),
+        orgId: z.string().uuid().describe("Organization UUID"),
         page: z.number().int().min(1).default(1).describe("Page number"),
-        page_size: z.number().int().min(1).max(100).default(25).describe("Results per page"),
+        pageSize: z.number().int().min(1).max(100).default(25).describe("Results per page"),
 
         ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
-    withGuard("elnora_list_library_files", getContext, async ({ org_id, page, page_size }) => {
+    withGuard("elnora_library_files", getContext, async ({ orgId, page, pageSize }) => {
       try {
-        const result = await getClient().get(`/organizations/${org_id}/library/files`, { page, pageSize: page_size });
+        const result = await getClient().get(`/organizations/${orgId}/library/files`, { page, pageSize });
         return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
@@ -36,20 +36,20 @@ export function registerLibraryTools(
   );
 
   server.registerTool(
-    "elnora_list_library_folders",
+    "elnora_library_folders",
     {
-      title: "List Library Folders",
-      description: "List folders in the organization shared library.",
+      title: "elnora_library_folders",
+      description: "List folders in the organization library",
       inputSchema: {
-        org_id: z.string().uuid().describe("Organization UUID"),
+        orgId: z.string().uuid().describe("Organization UUID"),
 
         ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
-    withGuard("elnora_list_library_folders", getContext, async ({ org_id }) => {
+    withGuard("elnora_library_folders", getContext, async ({ orgId }) => {
       try {
-        const result = await getClient().get(`/organizations/${org_id}/library/folders`);
+        const result = await getClient().get(`/organizations/${orgId}/library/folders`);
         return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
@@ -58,22 +58,24 @@ export function registerLibraryTools(
   );
 
   server.registerTool(
-    "elnora_create_library_folder",
+    "elnora_library_createFolder",
     {
-      title: "Create Library Folder",
-      description: "Create a folder in the organization shared library.",
+      title: "elnora_library_createFolder",
+      description: "Create a folder in the organization library",
       inputSchema: {
-        org_id: z.string().uuid().describe("Organization UUID"),
+        orgId: z.string().uuid().describe("Organization ID"),
         name: z.string().min(1).max(255).describe("Folder name"),
-        parent_id: z.string().uuid().optional().describe("Parent folder UUID"),
+        parent: z.string().uuid().optional().describe("Parent folder ID"),
 
         ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
-    withGuard("elnora_create_library_folder", getContext, async ({ org_id, name, parent_id }) => {
+    withGuard("elnora_library_createFolder", getContext, async ({ orgId, name, parent }) => {
       try {
-        const result = await getClient().post(`/organizations/${org_id}/library/folders`, { name, parentId: parent_id });
+        const body: Record<string, string> = { name };
+        if (parent) body.parentId = parent;
+        const result = await getClient().post(`/organizations/${orgId}/library/folders`, body);
         return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
@@ -82,22 +84,22 @@ export function registerLibraryTools(
   );
 
   server.registerTool(
-    "elnora_rename_library_folder",
+    "elnora_library_renameFolder",
     {
-      title: "Rename Library Folder",
-      description: "Rename a folder in the organization shared library.",
+      title: "elnora_library_renameFolder",
+      description: "Rename a folder in the organization library",
       inputSchema: {
-        org_id: z.string().uuid().describe("Organization UUID"),
-        folder_id: z.string().uuid().describe("Folder UUID"),
+        orgId: z.string().uuid().describe("Organization UUID"),
+        folderId: z.string().uuid().describe("Folder UUID"),
         name: z.string().min(1).max(255).describe("New name"),
 
         ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
-    withGuard("elnora_rename_library_folder", getContext, async ({ org_id, folder_id, name }) => {
+    withGuard("elnora_library_renameFolder", getContext, async ({ orgId, folderId, name }) => {
       try {
-        const result = await getClient().put(`/organizations/${org_id}/library/folders/${folder_id}`, { name });
+        const result = await getClient().put(`/organizations/${orgId}/library/folders/${folderId}`, { name });
         return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
@@ -106,22 +108,22 @@ export function registerLibraryTools(
   );
 
   server.registerTool(
-    "elnora_delete_library_folder",
+    "elnora_library_deleteFolder",
     {
-      title: "Delete Library Folder",
-      description: "Delete a folder from the organization shared library.",
+      title: "elnora_library_deleteFolder",
+      description: "Delete a folder from the organization library",
       inputSchema: {
-        org_id: z.string().uuid().describe("Organization UUID"),
-        folder_id: z.string().uuid().describe("Folder UUID"),
+        orgId: z.string().uuid().describe("Organization UUID"),
+        folderId: z.string().uuid().describe("Folder UUID"),
 
         ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
     },
-    withGuard("elnora_delete_library_folder", getContext, async ({ org_id, folder_id }) => {
+    withGuard("elnora_library_deleteFolder", getContext, async ({ orgId, folderId }) => {
       try {
-        await getClient().del(`/organizations/${org_id}/library/folders/${folder_id}`);
-        return { content: [{ type: "text" as const, text: JSON.stringify({ deleted: true, folderId: folder_id }) }] };
+        await getClient().del(`/organizations/${orgId}/library/folders/${folderId}`);
+        return { content: [{ type: "text" as const, text: JSON.stringify({ deleted: true, folderId }) }] };
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
       }

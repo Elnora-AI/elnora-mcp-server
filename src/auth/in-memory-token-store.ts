@@ -10,6 +10,7 @@ export class InMemoryTokenStore implements TokenStore {
   private tokenRecords = new Map<string, TokenRecord>();
   private refreshIndex = new Map<string, string>();
   private validationCache = new Map<string, number>();
+  private apiKeyValidations = new Map<string, { userId: string }>();
 
   // --- Sessions ---
   async getSession(authCode: string): Promise<AuthorizationSession | undefined> {
@@ -92,6 +93,20 @@ export class InMemoryTokenStore implements TokenStore {
 
   async deleteValidationCache(accessToken: string): Promise<void> {
     this.validationCache.delete(accessToken);
+  }
+
+  // --- API-key validation cache ---
+  async getApiKeyValidation(keyHash: string): Promise<{ userId: string } | undefined> {
+    return this.apiKeyValidations.get(keyHash);
+  }
+
+  async setApiKeyValidation(keyHash: string, data: { userId: string }, ttlSeconds: number): Promise<void> {
+    this.apiKeyValidations.set(keyHash, data);
+    setTimeout(() => this.apiKeyValidations.delete(keyHash), ttlSeconds * 1000).unref();
+  }
+
+  async deleteApiKeyValidation(keyHash: string): Promise<void> {
+    this.apiKeyValidations.delete(keyHash);
   }
 
   // --- Lifecycle ---

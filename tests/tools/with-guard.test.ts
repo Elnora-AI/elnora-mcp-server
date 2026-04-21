@@ -16,7 +16,7 @@ describe("withGuard", () => {
     const handler = vi.fn().mockResolvedValue({
       content: [{ type: "text", text: "ok" }],
     });
-    const guarded = withGuard("elnora_list_tasks", () => makeContext(["tasks:read"]), handler);
+    const guarded = withGuard("elnora_tasks_list", () => makeContext(["tasks:read"]), handler);
 
     const result = await guarded({});
     expect(handler).toHaveBeenCalled();
@@ -26,7 +26,7 @@ describe("withGuard", () => {
 
   it("blocks execution when scopes are missing", async () => {
     const handler = vi.fn();
-    const guarded = withGuard("elnora_create_task", () => makeContext(["tasks:read"]), handler);
+    const guarded = withGuard("elnora_tasks_create", () => makeContext(["tasks:read"]), handler);
 
     const result = await guarded({});
     expect(handler).not.toHaveBeenCalled();
@@ -58,7 +58,7 @@ describe("withGuard", () => {
 
   it("catches thrown errors from handler and returns isError", async () => {
     const handler = vi.fn().mockRejectedValue(new Error("unexpected crash"));
-    const guarded = withGuard("elnora_list_tasks", () => makeContext(["tasks:read"]), handler);
+    const guarded = withGuard("elnora_tasks_list", () => makeContext(["tasks:read"]), handler);
 
     const result = await guarded({});
     expect(result.isError).toBe(true);
@@ -71,7 +71,7 @@ describe("withGuard", () => {
       content: [{ type: "text", text: "Error: something broke" }],
       isError: true,
     });
-    const guarded = withGuard("elnora_list_tasks", () => makeContext(["tasks:read"]), handler);
+    const guarded = withGuard("elnora_tasks_list", () => makeContext(["tasks:read"]), handler);
 
     const result = await guarded({});
     expect(result.isError).toBe(true);

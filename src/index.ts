@@ -14,8 +14,8 @@ import { logAuthEvent } from "./middleware/tool-logging.js";
 import { RedisTokenStore } from "./auth/redis-token-store.js";
 import { RedisClientsStore } from "./auth/redis-clients-store.js";
 import { TokenStore } from "./auth/token-store.js";
+import { validateApiKey } from "./auth/validate-api-key.js";
 import rateLimit from "express-rate-limit";
-import axios from "axios";
 
 function requireEnv(name: string): string {
   const value = process.env[name];
@@ -38,31 +38,6 @@ function loadConfig(): ElnoraConfig {
     mcpServiceKey: requireEnv("ELNORA_MCP_SERVICE_KEY"),
     redisUrl: requireEnv("REDIS_URL"),
   };
-}
-
-/**
- * Validate an API key against the Elnora platform.
- * Returns the platform-assigned user identifier on success, or null on failure.
- * The platform is the sole authority — no local format checks gate access.
- */
-async function validateApiKeyWithPlatform(
-  apiKey: string,
-  config: ElnoraConfig,
-): Promise<{ userId: string } | null> {
-  try {
-    const validation = await axios.post(
-      config.tokenValidationUrl,
-      { token: apiKey },
-      { timeout: 10_000, headers: { "X-Service-Key": config.mcpServiceKey } },
-    );
-    if (validation.data.valid && validation.data.user_id) {
-      return { userId: String(validation.data.user_id) };
-    }
-    return null;
-  } catch (err) {
-    logAuthEvent("api_key_validation_error", "unknown", { error: err instanceof Error ? err.message : "Unknown error" });
-    return null;
-  }
 }
 
 async function main(): Promise<void> {
@@ -215,18 +190,18 @@ async function main(): Promise<void> {
    * If no API key header, calls next() to proceed to OAuth middleware.
    */
   async function apiKeyAuthMiddleware(req: Request, res: Response, next: NextFunction): Promise<void> {
-    const apiKey = req.headers["x-api-key"] as string | undefined;
+    const token = req.headers["x-api-key"] as string | undefined;
 
     // codeql[js/user-controlled-bypass] Dual auth by design: both API key and OAuth paths
     // validate credentials server-side. API key is validated by the platform's token endpoint;
     // absence of API key falls through to OAuth bearer token verification in ensureAuthenticated.
-    if (!apiKey) {
+    if (!token) {
       next();
       return;
     }
 
     // Validate against the platform (CoSAI MCP-T7)
-    const result = await validateApiKeyWithPlatform(apiKey, config);
+    const result = await validateApiKey(token, config, store);
 
     if (!result) {
       logAuthEvent("api_key_rejected", "unknown");
@@ -242,9 +217,8 @@ async function main(): Promise<void> {
 
     // Set auth context compatible with OAuth flow — use SDK's typed req.auth
     // API key users get all scopes — platform enforces permissions
-    // Store isApiKeyAuth flag — never store raw API key in extra (leakable if logged)
     req.auth = {
-      token: apiKey,
+      token,
       clientId: apiKeyClientId,
       scopes: ALL_SCOPES,
       extra: { isApiKeyAuth: true },
