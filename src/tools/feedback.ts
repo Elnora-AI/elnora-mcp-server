@@ -12,10 +12,10 @@ export function registerFeedbackTools(
   getContext: () => RequestContext,
 ): void {
   server.registerTool(
-    "elnora_submit_feedback",
+    "elnora_feedback_submit",
     {
-      title: "Submit Feedback",
-      description: "Submit user feedback about the Elnora platform.",
+      title: "elnora_feedback_submit",
+      description: "Submit feedback",
       inputSchema: {
         title: z.string().min(1).max(200).describe("Feedback title"),
         description: z.string().min(1).max(5000).describe("Detailed description"),
@@ -24,7 +24,7 @@ export function registerFeedbackTools(
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
-    withGuard("elnora_submit_feedback", getContext, async ({ title, description }) => {
+    withGuard("elnora_feedback_submit", getContext, async ({ title, description }) => {
       try {
         const result = await getClient().post("/feedback", { title, description });
         return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };

@@ -14,7 +14,7 @@ export function registerHealthTools(
     "elnora_health_check",
     {
       title: "Health Check",
-      description: "Check if the Elnora platform API is reachable.",
+      description: "Check Elnora API health status",
       inputSchema: {
         ...OUTPUT_OPTIONS_SCHEMA,
       },

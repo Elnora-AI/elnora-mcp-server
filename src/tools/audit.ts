@@ -12,25 +12,25 @@ export function registerAuditTools(
   getContext: () => RequestContext,
 ): void {
   server.registerTool(
-    "elnora_list_audit_log",
+    "elnora_audit_list",
     {
-      title: "List Audit Log",
-      description: "List organization audit log entries. Filterable by action and user.",
+      title: "elnora_audit_list",
+      description: "List audit log entries for an organization",
       inputSchema: {
-        org_id: z.string().uuid().describe("Organization UUID"),
+        orgId: z.string().uuid().describe("Organization UUID"),
         page: z.number().int().min(1).default(1).describe("Page number"),
-        page_size: z.number().int().min(1).max(100).default(25).describe("Results per page"),
+        pageSize: z.number().int().min(1).max(100).default(25).describe("Results per page"),
         action: z.string().min(1).max(200).optional().describe("Filter by action type"),
-        user_id: z.string().min(1).optional().describe("Filter by user ID"),
+        userId: z.string().min(1).optional().describe("Filter by user ID"),
 
         ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
-    withGuard("elnora_list_audit_log", getContext, async ({ org_id, page, page_size, action, user_id }) => {
+    withGuard("elnora_audit_list", getContext, async ({ orgId, page, pageSize, action, userId }) => {
       try {
-        const result = await getClient().get(`/organizations/${org_id}/audit-log`, {
-          page, pageSize: page_size, action, userId: user_id,
+        const result = await getClient().get(`/organizations/${orgId}/audit-log`, {
+          page, pageSize, action, userId,
         });
         return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
       } catch (error) {

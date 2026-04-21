@@ -41,21 +41,20 @@ describe("Tool Registration", () => {
 
   it("has scope definitions for all tool groups", () => {
     const toolGroups = {
-      tasks: ["elnora_list_tasks", "elnora_get_task", "elnora_get_task_messages", "elnora_create_task", "elnora_update_task", "elnora_archive_task"],
-      messages: ["elnora_send_message"],
-      files: ["elnora_list_files", "elnora_get_file", "elnora_get_file_content", "elnora_get_file_versions", "elnora_get_version_content", "elnora_upload_file", "elnora_create_file", "elnora_update_file", "elnora_archive_file", "elnora_download_file", "elnora_create_version", "elnora_restore_version", "elnora_promote_file", "elnora_fork_file", "elnora_create_working_copy", "elnora_commit_working_copy", "elnora_initiate_upload", "elnora_confirm_upload"],
-      projects: ["elnora_list_projects", "elnora_get_project", "elnora_create_project", "elnora_update_project", "elnora_archive_project", "elnora_list_project_members", "elnora_add_project_member", "elnora_update_project_member_role", "elnora_remove_project_member", "elnora_leave_project"],
-      search: ["elnora_search_tasks", "elnora_search_files", "elnora_search_all"],
-      orgs: ["elnora_list_orgs", "elnora_get_org", "elnora_create_org", "elnora_update_org", "elnora_list_org_members", "elnora_update_org_member_role", "elnora_remove_org_member", "elnora_get_org_billing", "elnora_invite_org_member", "elnora_list_org_invitations", "elnora_cancel_org_invitation", "elnora_get_invitation_info", "elnora_accept_invitation"],
-      folders: ["elnora_list_folders", "elnora_create_folder", "elnora_rename_folder", "elnora_move_folder", "elnora_delete_folder"],
-      library: ["elnora_list_library_files", "elnora_list_library_folders", "elnora_create_library_folder", "elnora_rename_library_folder", "elnora_delete_library_folder"],
-      apiKeys: ["elnora_list_api_keys", "elnora_create_api_key", "elnora_revoke_api_key"],
-      audit: ["elnora_list_audit_log"],
-      account: ["elnora_get_account", "elnora_update_account", "elnora_list_agreements", "elnora_accept_terms"],
-      feedback: ["elnora_submit_feedback"],
-      flags: ["elnora_list_flags", "elnora_get_flag"],
+      tasks: ["elnora_tasks_list", "elnora_tasks_get", "elnora_tasks_messages", "elnora_tasks_create", "elnora_tasks_send", "elnora_tasks_update", "elnora_tasks_archive"],
+      files: ["elnora_files_list", "elnora_files_get", "elnora_files_content", "elnora_files_versions", "elnora_files_versionContent", "elnora_files_upload", "elnora_files_create", "elnora_files_update", "elnora_files_archive", "elnora_files_download", "elnora_files_createVersion", "elnora_files_restore", "elnora_files_promote", "elnora_files_fork", "elnora_files_workingCopy", "elnora_files_commit", "elnora_files_uploadBatch", "elnora_files_confirmUpload", "elnora_files_searchContent"],
+      projects: ["elnora_projects_list", "elnora_projects_get", "elnora_projects_create", "elnora_projects_update", "elnora_projects_archive", "elnora_projects_members", "elnora_projects_addMember", "elnora_projects_updateRole", "elnora_projects_removeMember", "elnora_projects_leave"],
+      search: ["elnora_search_tasks", "elnora_search_files", "elnora_search_all", "elnora_search_fileContent"],
+      orgs: ["elnora_orgs_list", "elnora_orgs_get", "elnora_orgs_create", "elnora_orgs_update", "elnora_orgs_delete", "elnora_orgs_members", "elnora_orgs_updateRole", "elnora_orgs_removeMember", "elnora_orgs_billing", "elnora_orgs_setStripe", "elnora_orgs_setDefault", "elnora_orgs_invite", "elnora_orgs_invitations", "elnora_orgs_cancelInvite", "elnora_orgs_resendInvite", "elnora_orgs_invitationInfo", "elnora_orgs_acceptInvite", "elnora_orgs_files", "elnora_orgs_listAll"],
+      folders: ["elnora_folders_list", "elnora_folders_create", "elnora_folders_rename", "elnora_folders_move", "elnora_folders_delete"],
+      library: ["elnora_library_files", "elnora_library_folders", "elnora_library_createFolder", "elnora_library_renameFolder", "elnora_library_deleteFolder"],
+      apiKeys: ["elnora_api-keys_list", "elnora_api-keys_create", "elnora_api-keys_revoke", "elnora_api-keys_getPolicy", "elnora_api-keys_setPolicy"],
+      audit: ["elnora_audit_list"],
+      account: ["elnora_account_get", "elnora_account_update", "elnora_account_agreements", "elnora_account_acceptTerms", "elnora_account_delete", "elnora_account_users", "elnora_account_addLegalDoc", "elnora_account_updateLegalDoc", "elnora_account_deleteLegalDoc"],
+      feedback: ["elnora_feedback_submit"],
+      flags: ["elnora_flags_list", "elnora_flags_get", "elnora_flags_set"],
       health: ["elnora_health_check"],
-      protocols: ["elnora_generate_protocol"],
+      protocols: ["elnora_protocols_generate"],
     };
 
     for (const [group, tools] of Object.entries(toolGroups)) {

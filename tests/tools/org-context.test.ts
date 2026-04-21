@@ -60,11 +60,12 @@ describe("ElnoraApiClient org context", () => {
   });
 });
 
-describe("Org-scoped tools have org_id in inputSchema", () => {
-  // We verify this via the registered tools on the server
-  // Import the server creation to check tool schemas
-  it("org-scoped tools accept org_id parameter", async () => {
-    const { createElnoraServer, RequestContext } = await import("../../src/server.js");
+describe("Org context via X-Organization-Id header", () => {
+  // After the v1.0 CLI rename, org scoping is NOT a per-tool schema param —
+  // it's carried as an HTTP header set via setOrgContext(). This test just
+  // verifies that commonly-used renamed tools are registered on the server.
+  it("commonly-used tools are registered under the new naming convention", async () => {
+    const { createElnoraServer } = await import("../../src/server.js");
     const { ALL_SCOPES } = await import("../../src/constants.js");
 
     const getContext = () => ({
@@ -74,43 +75,25 @@ describe("Org-scoped tools have org_id in inputSchema", () => {
     });
 
     const server = createElnoraServer(getContext);
-
-    // Access internal tool registry
     const registeredTools = (server as unknown as Record<string, Record<string, unknown>>)._registeredTools;
 
-    // These tools MUST have org_id in their schema
-    const orgScopedTools = [
-      "elnora_list_projects",
-      "elnora_create_project",
-      "elnora_list_tasks",
-      "elnora_create_task",
+    const expectedTools = [
+      "elnora_projects_list",
+      "elnora_projects_get",
+      "elnora_projects_create",
+      "elnora_tasks_list",
+      "elnora_tasks_create",
       "elnora_search_tasks",
       "elnora_search_files",
       "elnora_search_all",
-      "elnora_list_files",
-      "elnora_upload_file",
-      "elnora_create_file",
-      "elnora_list_folders",
-      "elnora_create_folder",
+      "elnora_files_list",
+      "elnora_files_create",
+      "elnora_folders_list",
+      "elnora_folders_create",
     ];
 
-    for (const toolName of orgScopedTools) {
-      const tool = registeredTools[toolName] as { inputSchema?: { shape?: Record<string, unknown> } } | undefined;
-      expect(tool, `Tool "${toolName}" not registered`).toBeDefined();
-    }
-
-    // These tools should NOT have org_id (by-ID operations)
-    const nonOrgTools = [
-      "elnora_get_project",
-      "elnora_get_task",
-      "elnora_get_file",
-      "elnora_rename_folder",
-      "elnora_delete_folder",
-    ];
-
-    for (const toolName of nonOrgTools) {
-      const tool = registeredTools[toolName] as { inputSchema?: { shape?: Record<string, unknown> } } | undefined;
-      expect(tool, `Tool "${toolName}" not registered`).toBeDefined();
+    for (const toolName of expectedTools) {
+      expect(registeredTools[toolName], `Tool "${toolName}" not registered`).toBeDefined();
     }
   });
 });

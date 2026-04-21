@@ -12,16 +12,16 @@ export function registerFlagTools(
   getContext: () => RequestContext,
 ): void {
   server.registerTool(
-    "elnora_list_flags",
+    "elnora_flags_list",
     {
-      title: "List Feature Flags",
-      description: "List all global feature flags (no specific scope required).",
+      title: "elnora_flags_list",
+      description: "List all feature flags",
       inputSchema: {
         ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
-    withGuard("elnora_list_flags", getContext, async () => {
+    withGuard("elnora_flags_list", getContext, async () => {
       try {
         const result = await getClient().get("/globalFeatureFlags");
         return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
@@ -32,10 +32,10 @@ export function registerFlagTools(
   );
 
   server.registerTool(
-    "elnora_get_flag",
+    "elnora_flags_get",
     {
-      title: "Get Feature Flag",
-      description: "Get a single feature flag by key (no specific scope required).",
+      title: "elnora_flags_get",
+      description: "Get a feature flag by key",
       inputSchema: {
         key: z.string().min(1).max(200).regex(/^[\w-]+(?:\.[\w-]+)*$/).describe("Feature flag key"),
 
@@ -43,9 +43,33 @@ export function registerFlagTools(
       },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
-    withGuard("elnora_get_flag", getContext, async ({ key }) => {
+    withGuard("elnora_flags_get", getContext, async ({ key }) => {
       try {
         const result = await getClient().get(`/globalFeatureFlags/${key}`);
+        return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
+      } catch (error) {
+        return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
+      }
+    }),
+  );
+
+  server.registerTool(
+    "elnora_flags_set",
+    {
+      title: "elnora_flags_set",
+      description: "Set a feature flag value",
+      inputSchema: {
+        key: z.string().min(1).max(200).regex(/^[\w-]+(?:\.[\w-]+)*$/).describe("Feature flag key"),
+        value: z.union([z.string(), z.boolean(), z.number()]).describe("Flag value"),
+        yes: z.boolean().optional().describe("Skip confirmation"),
+
+        ...OUTPUT_OPTIONS_SCHEMA,
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+    },
+    withGuard("elnora_flags_set", getContext, async ({ key, value }) => {
+      try {
+        const result = await getClient().put(`/globalFeatureFlags/${key}`, { value });
         return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };

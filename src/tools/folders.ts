@@ -12,23 +12,20 @@ export function registerFolderTools(
   getContext: () => RequestContext,
 ): void {
   server.registerTool(
-    "elnora_list_folders",
+    "elnora_folders_list",
     {
-      title: "List Folders",
-      description: "List folders in a project.",
+      title: "elnora_folders_list",
+      description: "List folders in a project",
       inputSchema: {
-        org_id: z.string().uuid().optional().describe("Organization UUID (optional, defaults to active org)"),
-        project_id: z.string().uuid().describe("Project UUID"),
+        projectId: z.string().uuid().describe("Project UUID"),
 
         ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
-    withGuard("elnora_list_folders", getContext, async ({ org_id, project_id }) => {
+    withGuard("elnora_folders_list", getContext, async ({ projectId }) => {
       try {
-        const client = getClient();
-        if (org_id) client.setOrgContext(org_id);
-        const result = await client.get(`/projects/${project_id}/folders`);
+        const result = await getClient().get(`/projects/${projectId}/folders`);
         return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
@@ -37,25 +34,22 @@ export function registerFolderTools(
   );
 
   server.registerTool(
-    "elnora_create_folder",
+    "elnora_folders_create",
     {
-      title: "Create Folder",
-      description: "Create a folder in a project.",
+      title: "elnora_folders_create",
+      description: "Create a new folder in a project",
       inputSchema: {
-        org_id: z.string().uuid().optional().describe("Organization UUID (optional, defaults to active org)"),
-        project_id: z.string().uuid().describe("Project UUID"),
+        projectId: z.string().uuid().describe("Project UUID"),
         name: z.string().min(1).max(255).describe("Folder name"),
-        parent_id: z.string().uuid().optional().describe("Parent folder UUID for nesting"),
+        parentId: z.string().uuid().optional().describe("Parent folder UUID for nesting"),
 
         ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
-    withGuard("elnora_create_folder", getContext, async ({ org_id, project_id, name, parent_id }) => {
+    withGuard("elnora_folders_create", getContext, async ({ projectId, name, parentId }) => {
       try {
-        const client = getClient();
-        if (org_id) client.setOrgContext(org_id);
-        const result = await client.post(`/projects/${project_id}/folders`, { name, parentId: parent_id });
+        const result = await getClient().post(`/projects/${projectId}/folders`, { name, parentId });
         return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
@@ -64,21 +58,21 @@ export function registerFolderTools(
   );
 
   server.registerTool(
-    "elnora_rename_folder",
+    "elnora_folders_rename",
     {
-      title: "Rename Folder",
-      description: "Rename a folder.",
+      title: "elnora_folders_rename",
+      description: "Rename a folder",
       inputSchema: {
-        folder_id: z.string().uuid().describe("Folder UUID"),
+        folderId: z.string().uuid().describe("Folder UUID"),
         name: z.string().min(1).max(255).describe("New name"),
 
         ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
-    withGuard("elnora_rename_folder", getContext, async ({ folder_id, name }) => {
+    withGuard("elnora_folders_rename", getContext, async ({ folderId, name }) => {
       try {
-        const result = await getClient().put(`/folders/${folder_id}`, { name });
+        const result = await getClient().put(`/folders/${folderId}`, { name });
         return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
@@ -87,21 +81,21 @@ export function registerFolderTools(
   );
 
   server.registerTool(
-    "elnora_move_folder",
+    "elnora_folders_move",
     {
-      title: "Move Folder",
-      description: "Move a folder to a new parent (null for root).",
+      title: "elnora_folders_move",
+      description: "Move a folder to a new parent (or to root)",
       inputSchema: {
-        folder_id: z.string().uuid().describe("Folder UUID"),
-        parent_id: z.string().uuid().optional().describe("New parent folder UUID (omit for root)"),
+        folderId: z.string().uuid().describe("Folder UUID"),
+        parentId: z.string().uuid().optional().describe("New parent folder UUID (omit for root)"),
 
         ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
-    withGuard("elnora_move_folder", getContext, async ({ folder_id, parent_id }) => {
+    withGuard("elnora_folders_move", getContext, async ({ folderId, parentId }) => {
       try {
-        const result = await getClient().put(`/folders/${folder_id}/move`, { parentId: parent_id ?? null });
+        const result = await getClient().put(`/folders/${folderId}/move`, { parentId: parentId ?? null });
         return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
@@ -110,21 +104,21 @@ export function registerFolderTools(
   );
 
   server.registerTool(
-    "elnora_delete_folder",
+    "elnora_folders_delete",
     {
-      title: "Delete Folder",
-      description: "Delete a folder.",
+      title: "elnora_folders_delete",
+      description: "Delete a folder",
       inputSchema: {
-        folder_id: z.string().uuid().describe("Folder UUID"),
+        folderId: z.string().uuid().describe("Folder UUID"),
 
         ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
     },
-    withGuard("elnora_delete_folder", getContext, async ({ folder_id }) => {
+    withGuard("elnora_folders_delete", getContext, async ({ folderId }) => {
       try {
-        await getClient().del(`/folders/${folder_id}`);
-        return { content: [{ type: "text" as const, text: JSON.stringify({ deleted: true, folderId: folder_id }) }] };
+        await getClient().del(`/folders/${folderId}`);
+        return { content: [{ type: "text" as const, text: JSON.stringify({ deleted: true, folderId }) }] };
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
       }
