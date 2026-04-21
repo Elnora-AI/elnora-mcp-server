@@ -37,11 +37,11 @@ function deriveCacheKey(credential: string, secret: string): string {
  * pre-cache behavior.
  */
 export async function validateApiKey(
-  apiKey: string,
+  token: string,
   config: ElnoraConfig,
   store: Pick<TokenStore, "getApiKeyValidation" | "setApiKeyValidation">,
 ): Promise<{ userId: string } | null> {
-  const keyHash = deriveCacheKey(apiKey, config.mcpServiceKey);
+  const keyHash = deriveCacheKey(token, config.mcpServiceKey);
 
   try {
     const cached = await store.getApiKeyValidation(keyHash);
@@ -56,7 +56,7 @@ export async function validateApiKey(
   try {
     const validation = await axios.post(
       config.tokenValidationUrl,
-      { token: apiKey },
+      { token },
       { timeout: 10_000, headers: { "X-Service-Key": config.mcpServiceKey } },
     );
     // Platform response may use camelCase (.NET default) or snake_case.
