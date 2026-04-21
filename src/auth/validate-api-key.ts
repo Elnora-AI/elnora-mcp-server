@@ -7,29 +7,28 @@ import { logAuthEvent } from "../middleware/tool-logging.js";
 const CACHE_TTL_SECONDS = 90;
 
 /**
- * Derives a deterministic, irreversible cache key from a credential string.
+ * Derives a deterministic, irreversible cache key from a credential string
+ * using HMAC-SHA256 with a server-side secret.
  *
- * NOT a password hash — that would need a slow KDF (bcrypt/argon2) with a
- * per-entry salt, which breaks the two properties we need here:
- *   1. Deterministic: the same credential must map to the same cache key so
- *      a lookup on the second request finds the first request's entry.
- *   2. Fast: this runs on every inbound request; a slow KDF would dominate
- *      request latency.
+ * NOT a password hash. This is a keyed-hash for cache-key derivation, which
+ * needs to be (1) deterministic so lookups hit, and (2) fast because it
+ * runs on every inbound request. A slow password KDF (bcrypt/argon2) would
+ * break both properties.
  *
- * The purpose is to avoid persisting the raw credential in the cache store.
- * Credentials are 40+ characters of cryptographic randomness, so a rainbow
- * table attack against sha256 is computationally infeasible at this length.
+ * Using HMAC instead of a bare hash namespaces cache keys to this
+ * deployment (different MCP instances derive different keys for the same
+ * input) and removes the raw credential from the persisted cache entry.
  */
-function deriveCacheKey(credential: string): string {
-  return crypto.createHash("sha256").update(credential).digest("hex");
+function deriveCacheKey(credential: string, secret: string): string {
+  return crypto.createHmac("sha256", secret).update(credential).digest("hex");
 }
 
 /**
  * Validate an API key against the Elnora platform.
  *
- * Uses a short-lived cache (TTL {@link CACHE_TTL_SECONDS}s) keyed by a
- * sha256 hash of the raw key so repeated validations within the window skip
- * the platform round-trip. The raw key is never persisted. Only successful
+ * Uses a short-lived cache (TTL {@link CACHE_TTL_SECONDS}s) keyed by an
+ * HMAC of the raw key so repeated validations within the window skip the
+ * platform round-trip. The raw key is never persisted. Only successful
  * validations are cached; failures always re-hit the platform so a user
  * who regenerates a revoked key isn't stuck with a stale 'no' answer.
  *
@@ -42,7 +41,7 @@ export async function validateApiKey(
   config: ElnoraConfig,
   store: Pick<TokenStore, "getApiKeyValidation" | "setApiKeyValidation">,
 ): Promise<{ userId: string } | null> {
-  const keyHash = deriveCacheKey(apiKey);
+  const keyHash = deriveCacheKey(apiKey, config.mcpServiceKey);
 
   try {
     const cached = await store.getApiKeyValidation(keyHash);
