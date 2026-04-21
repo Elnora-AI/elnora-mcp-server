@@ -13,7 +13,7 @@ export function registerHealthTools(
   server.registerTool(
     "elnora_health_check",
     {
-      title: "Health Check",
+      title: "elnora_health_check",
       description: "Check Elnora API health status",
       inputSchema: {
         ...OUTPUT_OPTIONS_SCHEMA,

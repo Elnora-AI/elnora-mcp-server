@@ -55,8 +55,10 @@ async function validateApiKeyWithPlatform(
       { token: apiKey },
       { timeout: 10_000, headers: { "X-Service-Key": config.mcpServiceKey } },
     );
-    if (validation.data.valid && validation.data.user_id) {
-      return { userId: String(validation.data.user_id) };
+    // Backend may return userId (camelCase, .NET default) or user_id (snake_case).
+    const userId = validation.data.user_id ?? validation.data.userId;
+    if (validation.data.valid && userId) {
+      return { userId: String(userId) };
     }
     return null;
   } catch (err) {

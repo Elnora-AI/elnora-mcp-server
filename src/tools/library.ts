@@ -64,7 +64,7 @@ export function registerLibraryTools(
       description: "Create a folder in the organization library",
       inputSchema: {
         orgId: z.string().uuid().describe("Organization ID"),
-        name: z.string().min(1).describe("Folder name"),
+        name: z.string().min(1).max(255).describe("Folder name"),
         parent: z.string().uuid().optional().describe("Parent folder ID"),
 
         ...OUTPUT_OPTIONS_SCHEMA,

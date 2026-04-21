@@ -84,8 +84,9 @@ export function registerTaskTools(
     withGuard("elnora_tasks_create", getContext, async ({ project, title, message }) => {
       try {
         const client = getClient();
+        // Note: backend /tasks does not accept initialMessage in the create body.
+        // The message is sent separately via sendMessage below to avoid duplication.
         const body: Record<string, unknown> = { projectId: project, title: title || "New Task" };
-        if (message) body.initialMessage = message;
         const task = await client.post<{ id: string }>("/tasks", body);
 
         // Two-step: create then send initial message if provided.
