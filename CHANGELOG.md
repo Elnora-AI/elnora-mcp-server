@@ -5,6 +5,13 @@ All notable changes to the Elnora MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.0.1](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v1.0.0...mcp-server-v1.0.1) (2026-04-24)
+
+
+### Bug Fixes
+
+* **docker:** upgrade openssl to remediate 5 HIGH CVEs (Inspector findings) ([#167](https://github.com/Elnora-AI/elnora-mcp-server/issues/167)) ([2069460](https://github.com/Elnora-AI/elnora-mcp-server/commit/2069460718d905e3b4c3e78d3358c3b60cf1d66a)), closes [#128](https://github.com/Elnora-AI/elnora-mcp-server/issues/128) [#63](https://github.com/Elnora-AI/elnora-mcp-server/issues/63) [#142](https://github.com/Elnora-AI/elnora-mcp-server/issues/142) [#144](https://github.com/Elnora-AI/elnora-mcp-server/issues/144) [#143](https://github.com/Elnora-AI/elnora-mcp-server/issues/143)
+
 ## [1.0.0](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v0.13.0...mcp-server-v1.0.0) (2026-04-21)
 
 
