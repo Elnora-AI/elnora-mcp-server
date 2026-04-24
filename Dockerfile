@@ -9,6 +9,9 @@ RUN npm run build
 FROM node:24-slim
 WORKDIR /app
 ENV NODE_ENV=production
+RUN apt-get update && \
+    apt-get install -y --only-upgrade libssl3 openssl && \
+    rm -rf /var/lib/apt/lists/*
 COPY --from=builder /app/package.json /app/package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts && \
     rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
