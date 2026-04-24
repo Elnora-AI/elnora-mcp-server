@@ -196,6 +196,25 @@ jobs:
             You are an automated vulnerability remediation agent for the Elnora
             MCP Server (a TypeScript/Node.js project using Express, MCP SDK, axios).
 
+            ## Public-Repository Disclosure Rules
+
+            This repository is PUBLIC. Any text you put in a PR description,
+            commit message, issue comment, or stdout/workflow log is visible
+            to anyone on the internet. Treat all output as a public disclosure.
+
+            Do NOT publish, anywhere (PR body, commit message, comment, log):
+            - unfixed / skipped CVEs or any rationale for not fixing them
+            - risk-acceptance reasoning or "why this is safe despite not fixing"
+            - attack preconditions, threat analysis, or exploit-ability notes
+            - defensive posture details (container user, runtime surface, etc.)
+            - any statement describing what conditions an attacker would need
+              or what conditions do not exist in our environment
+            - which call sites or files import the vulnerable dependency, or
+              which APIs of that dependency our code uses
+
+            If you need to reason about the above, keep it in your internal
+            scratchpad only — do not emit it to any GitHub-visible surface.
+
             ## Your Task
 
             Read /tmp/vuln-alerts.json which contains open Dependabot vulnerability
@@ -214,15 +233,13 @@ jobs:
             2. **Fix available (major version bump)**:
                - Check the package changelog/release notes for breaking changes.
                - If the package is a devDependency (only used in tests/build), apply it.
-               - If it's a production dependency, check if our code uses any APIs that
-                 changed. Apply if safe, skip if breaking.
-               - Note any skipped major bumps in your report.
+               - If it's a production dependency, assess internally whether it's
+                 safe to apply. Apply if safe, skip silently if not.
 
             3. **No fix available**:
                - Do NOT modify any code for these.
-               - Note them in your report as "no fix available — risk acceptance candidate".
-               - Include a brief explanation of why the risk is acceptable (e.g., the
-                 vulnerable code path is not reachable in our deployment).
+               - Do NOT produce public analysis or rationale. The existing open
+                 GitHub issue already tracks the alert for internal triage.
 
             ## Steps
 
@@ -232,43 +249,35 @@ jobs:
                a. Apply the fix (update package.json or overrides)
                b. Run `npm install` to update the lockfile
                c. Run `npm test` to verify nothing breaks
-               d. If tests fail, revert that specific change and note it as "fix broke tests"
+               d. If tests fail, revert that specific change silently.
             4. After all fixes are applied, run `npm audit` to verify remaining status
             5. Create a single branch and PR with all fixes:
                - Branch: `fix/vuln-remediation-<date>` (use today's date, e.g., fix/vuln-remediation-2026-04-08)
                - PR title: `fix(deps): automated vulnerability remediation <date>`
-               - PR body must include:
+               - PR body must include ONLY the sections below:
 
                  ## Vulnerabilities Fixed
                  | CVE/GHSA | Package | Old Version | New Version | Type |
                  |----------|---------|-------------|-------------|------|
-                 (table of all fixed vulns)
-
-                 ## Vulnerabilities Skipped
-                 | CVE/GHSA | Package | Reason |
-                 |----------|---------|--------|
-                 (table of skipped vulns with reasons)
-
-                 ## Risk Assessment
-                 - For each fix: brief note on safety (patch/minor, tests pass, etc.)
-                 - Overall assessment: "ready-to-merge" or "needs-review"
+                 (FIXED vulns only — no "Skipped", no "Risk Assessment",
+                  no safety commentary)
 
                  ## Test Results
-                 - Paste the test output summary
+                 One line summary only (e.g. "122 tests pass, 0 failures").
+                 Do NOT paste stack traces or error details.
 
-                 ## Closes
+                 Fixes #NNN
+                 Fixes #MMM
+                 (one "Fixes #NNN" line per FIXED vuln, using the
+                 `githubIssueNumber` from the alert data; no lines for
+                 skipped or unfixed vulns)
 
-                 For each FIXED vulnerability, add a "Fixes #NNN" line using the
-                 `githubIssueNumber` field from the alert data. This auto-closes
-                 the GitHub issue (and its synced Linear issue) when the PR merges.
-                 Example:
-                 Fixes #117
-                 Fixes #118
-                 Only include issue numbers for vulnerabilities that were actually
-                 fixed in this PR — not for skipped ones.
+               Do NOT include these sections: "Vulnerabilities Skipped",
+               "Risk Assessment", "ready-to-merge" / "needs-review" labels,
+               or any narrative about impact on our codebase.
 
-            6. If there are no fixable alerts (all are no-fix-available), do NOT create
-               a PR. Instead, just output a summary of what was found.
+            6. If there are no fixable alerts, do NOT create a PR and do NOT
+               emit a public summary of what was found. Exit quietly.
 
             ## Important Rules
 
@@ -281,8 +290,9 @@ jobs:
             - When creating the PR, request a review from `rjamul-elnora-ai`
               using `gh pr create ... --reviewer rjamul-elnora-ai`. This ensures
               the PR author gets a GitHub notification to review the auto-fix.
-            - The PR description must be clear enough for a human reviewer to
-              understand what changed and why, and to make a merge decision quickly.
+            - The PR description must be clear enough for a reviewer to decide
+              on merge, but it must not include any of the items forbidden in
+              the Public-Repository Disclosure Rules above.
           claude_args: |
             --model claude-sonnet-4-6
             --max-turns 60

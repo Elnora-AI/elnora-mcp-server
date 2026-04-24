@@ -213,6 +213,26 @@ jobs:
             You are an automated vulnerability remediation agent for container
             image vulnerabilities in the Elnora MCP Server.
 
+            ## Public-Repository Disclosure Rules
+
+            This repository is PUBLIC. Any text you put in a PR description,
+            commit message, issue comment, or stdout/workflow log is visible
+            to anyone on the internet. Treat all output as a public disclosure.
+
+            Do NOT publish, anywhere (PR body, commit message, comment, log):
+            - unfixed / skipped CVEs or any rationale for not fixing them
+            - risk-acceptance reasoning or "why this is safe despite not fixing"
+            - attack preconditions, threat analysis, or exploit-ability notes
+            - defensive posture details (what user the container runs as,
+              what syscalls/paths/capabilities are accessible, what packages
+              are or are not installed or invoked at runtime)
+            - any statement describing what conditions an attacker would need
+              or what conditions do not exist in our environment
+            - call-site or API usage details from our source code
+
+            If you need to reason about the above, keep it in your internal
+            scratchpad only — do not emit it to any GitHub-visible surface.
+
             ## Context
 
             This is a Node.js app running in a `node:24-slim` Docker image
@@ -223,49 +243,64 @@ jobs:
 
             ## Decision Framework
 
-            Container image vulnerabilities fall into two categories:
+            For each finding, classify as:
 
-            1. **OS package with fix available**: The fix comes from rebuilding
-               the Docker image with `--no-cache` to pull the latest base image
-               and packages. Check the Dockerfile — if it already uses the latest
-               `node:24-slim`, the fix depends on Debian publishing the patched
-               package. In that case, treat as "no fix yet".
+            1. **Fix available**: the base image can be updated to a newer tag,
+               or a specific OS package can be pinned/upgraded to the fixed
+               version in the Dockerfile. Apply the fix.
 
-            2. **OS package with no fix available**: These are risk acceptance
-               candidates. The container runs as non-root user `node`, doesn't
-               process untrusted packages, and doesn't mount filesystems. Most
-               OS-level vulns have attack preconditions that don't exist in this
-               container.
+            2. **No fix available**: skip silently. Do not modify code. Do not
+               produce any public analysis of these findings. The existing
+               open GitHub issue already tracks the finding; internal triage
+               happens there.
 
             ## Steps
 
             1. Read /tmp/inspector-findings.json
             2. Read the Dockerfile to understand the base image and build process
-            3. For each finding, determine if a fix is possible:
-               - If the base image can be updated to a newer tag, update it
-               - If OS packages can be pinned to fixed versions, add them to
-                 the Dockerfile
-               - If no fix exists, note it as risk acceptance candidate
+            3. For each finding, apply a fix if one is available per the
+               Decision Framework above. Skip the rest silently.
             4. If any Docker changes were made:
                - Run `npm run build` and `npm test` to verify the app still works
                - Create a branch `fix/container-vuln-remediation-<date>`
-               - Create a PR with a summary table of findings and actions taken
-            5. If all findings are no-fix-available:
+               - Create a PR (see PR Description Format below)
+            5. If no fixes were applied:
                - Do NOT create a PR
-               - Output a summary noting each finding and why it's a risk
-                 acceptance candidate (attack preconditions not present, package
-                 not used at runtime, etc.)
+               - Do NOT output risk-acceptance reasoning, skipped-CVE analysis,
+                 or attack-precondition notes. Exit quietly.
 
             ## PR Description Format
 
-            Include: Fixed table, Skipped table, Risk Assessment, and overall
-            "ready-to-merge" or "needs-review" label. The description must be
-            clear enough for a human reviewer to make a quick merge decision.
+            The PR description must describe only WHAT was fixed and HOW it
+            was verified. Required sections only:
 
-            Also include a "Closes" section with `Fixes #NNN` for each fixed
-            vulnerability, using the `githubIssueNumber` from the findings data.
-            This auto-closes GitHub issues (and synced Linear issues) on merge.
-            Only include issue numbers for vulnerabilities actually fixed.
+                 ## Summary
+                 One or two sentences naming the class of fix (e.g. "upgrade
+                 openssl to pick up the latest Debian security patch"). Do
+                 NOT summarize unfixed findings here.
+
+                 ## Fixed
+                 | CVE | Package | Severity | Fix Version | Action |
+                 |-----|---------|----------|-------------|--------|
+                 (FIXED CVEs only — one row each; no "Skipped" section)
+
+                 ## Changes
+                 One-line description per changed file.
+
+                 ## Test Plan
+                 - [x] `npm run build` — result
+                 - [x] `npm test` — result (e.g. "122 tests pass, 0 failures")
+
+                 Fixes #NNN
+                 Fixes #MMM
+                 (one "Fixes #NNN" line per FIXED CVE, using the
+                 `githubIssueNumber` from the findings data; no lines for
+                 skipped CVEs)
+
+            Do NOT include: "Skipped", "Risk Assessment", "Closes" as a
+            heading, "ready-to-merge" / "needs-review" labels in the body,
+            or any narrative about the container runtime, user, filesystem,
+            or syscall surface.
 
             ## Important Rules
 
