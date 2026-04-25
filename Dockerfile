@@ -10,7 +10,8 @@ FROM node:24-slim
 WORKDIR /app
 ENV NODE_ENV=production
 RUN apt-get update && \
-    apt-get install -y --only-upgrade libssl3 openssl && \
+    apt-get upgrade -y --no-install-recommends && \
+    apt-get install -y --no-install-recommends libssl3 openssl && \
     rm -rf /var/lib/apt/lists/*
 COPY --from=builder /app/package.json /app/package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts && \
