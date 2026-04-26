@@ -1,4 +1,4 @@
-FROM node:24-slim AS builder
+FROM node:24-bookworm-slim AS builder
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --ignore-scripts
@@ -6,7 +6,7 @@ COPY tsconfig.json ./
 COPY src/ ./src/
 RUN npm run build
 
-FROM node:24-slim
+FROM node:24-bookworm-slim
 WORKDIR /app
 ENV NODE_ENV=production
 RUN apt-get update && \
