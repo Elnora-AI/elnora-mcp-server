@@ -1,5 +1,9 @@
 FROM node:24-slim AS builder
 WORKDIR /app
+RUN apt-get update && \
+    apt-get upgrade -y --no-install-recommends && \
+    apt-get install -y --no-install-recommends libssl3 openssl && \
+    rm -rf /var/lib/apt/lists/*
 COPY package.json package-lock.json ./
 RUN npm ci --ignore-scripts
 COPY tsconfig.json ./
