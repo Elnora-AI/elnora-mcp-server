@@ -117,27 +117,38 @@ jobs:
 
             ## Public-Repository Disclosure Rules
 
-            This repository is PUBLIC. Individual Dependabot PRs, the batch
-            PR, sticky comments, and workflow logs are all visible to anyone
-            on the internet. Before writing any GitHub-visible text, ask
-            yourself whether it would help someone attack us.
+            This repository is PUBLIC. Every artifact this workflow
+            produces — per-PR sticky comments, the batch PR title and
+            body, the commit message, and workflow logs — is visible to
+            anyone on the internet. Before writing any GitHub-visible
+            text, ask yourself whether it would help someone attack us.
 
-            Do NOT publish anywhere (PR body, commit message, comment, log):
+            **Default to omission.** When unsure whether a sentence is
+            safe to publish, leave it out. Empty space is the right
+            answer if the alternative is detail.
+
+            Do NOT publish anywhere (sticky comment, batch PR title or
+            body, commit message, log):
             - which files in our codebase import or use a given dependency
             - which specific APIs/exports of a dependency our code calls
-            - CVE / advisory IDs with reasoning about whether they affect
-              our code paths (that analysis is an attack roadmap)
+            - CVE / advisory IDs, security-advisory descriptions, or any
+              reasoning about whether an advisory affects our code paths
+              (that analysis is an attack roadmap)
+            - the phrases "security release", "patches CVE", "fixes
+              vulnerability", "security fix" — say "upstream release" or
+              omit entirely
+            - specific new APIs, removed APIs, renamed exports, or
+              behavioral diffs lifted from the changelog — collapse to
+              "non-breaking changes per upstream notes" or
+              "breaking changes — manual review required"
+            - whether a dependency is direct vs transitive
+            - exact test counts, skip counts, pass/fail tallies, or
+              coverage numbers — use only Boolean ✓ / ✗
+            - npm audit counts or vulnerability tallies — drop entirely
+            - the presence or absence of lint, coverage, SBOM, or any
+              other tooling we run or don't run
             - attack preconditions, exploit paths, or threat reasoning
             - defensive posture details about our runtime environment
-
-            For the "Codebase impact" line in sticky comments, emit only a
-            high-level count or Boolean-style note — never file paths,
-            function names, or API names. Examples of acceptable phrasings:
-            - "No direct imports; transitive only."
-            - "Direct import in a small number of internal modules."
-            - "Direct import; CI gates exercise the affected paths."
-            If you cannot describe the impact without naming files or APIs,
-            omit the line entirely.
 
             ## Your Task
 
@@ -188,7 +199,10 @@ jobs:
                | **UNSAFE-MAJOR** | semver-major bump. Default verdict for majors regardless of whether tests pass — they need dedicated planning. EXCEPTION: if the package is a devDependency only AND tests pass AND no breaking changes affect us, may downgrade to NEEDS-REVIEW |
                | **UNSAFE-BROKEN** | build/test fails after applying the bump cleanly |
 
-            7. **Post a sticky comment on the Dependabot PR** with this format:
+            7. **Post a sticky comment on the Dependabot PR** with this
+               format. The template's section labels are fixed; the
+               content of each line is constrained to the enumerations
+               shown — do NOT free-write detail into any field.
 
                ```
                <!-- claude-dep-review:sticky -->
@@ -199,15 +213,25 @@ jobs:
                **Package**: <name> (<old> → <new>)
 
                ### Rationale
-               - Changelog summary: <key entries — public release notes only>
-               - Codebase impact: <high-level phrasing per public-repo rules,
-                 or omit entirely; never name files or APIs>
-               - CI gates: lint ✓ / build ✓ / test ✓ (or specific failures; lint skipped if repo has no lint script)
-               - Transitive/peer notes: <if any — no CVE analysis>
+               - Changelog summary: <exactly one of —
+                 "Patch release." |
+                 "Minor release — non-breaking per upstream notes." |
+                 "Minor release — breaking changes require manual review." |
+                 "Major release — manual review required.">
+               - CI gates: build ✓ · test ✓ · lint ✓
+                 (use ✗ for any gate that failed; use — for lint if no
+                 lint script; never add counts, durations, or details)
+               - Transitive/peer notes: include this line ONLY if there
+                 are actual peer-dep conflicts; phrase as
+                 "peer-dep conflict — manual review required" with no
+                 further detail. If there are no conflicts, OMIT the
+                 line entirely. Never write "no conflicts detected".
 
                ### Recommendation
-               <merge in the next batch PR | review manually before merging |
-                close — major version requires dedicated migration work>
+               <exactly one of —
+                "Merge in the next batch PR." |
+                "Review manually before merging." |
+                "Major bump — dedicated migration work required.">
                ```
 
                Find any existing comment with the marker
@@ -260,20 +284,28 @@ jobs:
                - Body must include:
 
                  ## Included Bumps
-                 | PR | Package | Old | New | Type | Rationale |
-                 |----|---------|-----|-----|------|-----------|
+                 | PR | Package | Old → New | Type |
+                 |----|---------|-----------|------|
 
                  ## Skipped — Needs Review
-                 | PR | Package | Old | New | Reason |
-                 |----|---------|-----|-----|--------|
+                 | PR | Package | Old → New | Reason |
+                 |----|---------|-----------|--------|
+
+                 The Reason cell MUST be exactly one of:
+                 - "Major bump — manual review required"
+                 - "Minor bump — manual review required"
+                 - "Build/test failed — manual review required"
+                 Do not write anything more specific.
 
                  ## Recommended to Close — Major
-                 | PR | Package | Old | New | Why dedicated work is needed |
-                 |----|---------|-----|-----|------------------------------|
+                 | PR | Package | Old → New |
+                 |----|---------|-----------|
 
                  ## Verification
-                 - lint ✓ / build ✓ / test ✓ (paste summary; lint skipped if not available)
-                 - npm audit summary
+                 build ✓ · test ✓ · lint ✓
+                 (use ✗ for any gate that failed; use — for lint if no
+                 lint script; never add counts, durations, or audit
+                 numbers)
 
                  ## How to Merge
                  Merging this PR will cause Dependabot to auto-close the
