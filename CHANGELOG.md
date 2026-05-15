@@ -5,6 +5,13 @@ All notable changes to the Elnora MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.1.0](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v1.0.5...mcp-server-v1.1.0) (2026-05-15)
+
+
+### Features
+
+* add periodic heartbeat log task ([#204](https://github.com/Elnora-AI/elnora-mcp-server/issues/204)) ([5f3744f](https://github.com/Elnora-AI/elnora-mcp-server/commit/5f3744fe9fe8f96438ddb4287dbe19ab8d1b377d))
+
 ## [1.0.5](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v1.0.4...mcp-server-v1.0.5) (2026-05-12)
 
 
