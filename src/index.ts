@@ -310,9 +310,21 @@ async function main(): Promise<void> {
     console.error(`Health check: http://localhost:${config.port}/health`);
   });
 
+  // Heartbeat — emits one structured log line per minute with uptime and memory.
+  const heartbeatStartedAt = Date.now();
+  const heartbeatInterval = setInterval(() => {
+    const uptimeSec = Math.floor((Date.now() - heartbeatStartedAt) / 1000);
+    const mem = process.memoryUsage();
+    const rssMb = Math.round(mem.rss / 1024 / 1024);
+    const heapUsedMb = Math.round(mem.heapUsed / 1024 / 1024);
+    console.error(`heartbeat uptime_sec=${uptimeSec} rss_mb=${rssMb} heap_used_mb=${heapUsedMb}`);
+  }, 60_000);
+  heartbeatInterval.unref();
+
   // Graceful shutdown — let in-flight requests drain before ECS kills the process
   const gracefulShutdown = async (signal: string) => {
     console.error(`${signal} received — shutting down gracefully`);
+    clearInterval(heartbeatInterval);
     httpServer.close(async () => {
       await clientsStore.disconnect();
       await store.disconnect();
