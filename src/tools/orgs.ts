@@ -230,15 +230,15 @@ export function registerOrgTools(
       description: "Set the Stripe customer ID for an organization",
       inputSchema: {
         orgId: z.string().uuid().describe("Organization UUID"),
-        customerId: z.string().min(1).describe("Stripe customer ID"),
+        stripeCustomerId: z.string().min(1).describe("Stripe customer ID"),
 
         ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
-    withGuard("elnora_orgs_setStripe", getContext, async ({ orgId, customerId }) => {
+    withGuard("elnora_orgs_setStripe", getContext, async ({ orgId, stripeCustomerId }) => {
       try {
-        const result = await getClient().put(`/organizations/${orgId}/stripe-customer`, { customerId });
+        const result = await getClient().put(`/organizations/${orgId}/stripe-customer`, { stripeCustomerId });
         return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
