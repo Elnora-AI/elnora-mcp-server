@@ -5,6 +5,13 @@ All notable changes to the Elnora MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.1.1](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v1.1.0...mcp-server-v1.1.1) (2026-05-19)
+
+
+### Bug Fixes
+
+* **orgs:** use stripeCustomerId in set-stripe wire payload ([#207](https://github.com/Elnora-AI/elnora-mcp-server/issues/207)) ([6b2f7c6](https://github.com/Elnora-AI/elnora-mcp-server/commit/6b2f7c635a3487dcea7ad75159cd3e3dc9eee365))
+
 ## [1.1.0](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v1.0.5...mcp-server-v1.1.0) (2026-05-15)
 
 
