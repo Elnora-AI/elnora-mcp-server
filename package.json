@@ -47,7 +47,7 @@
     "axios": "^1.16.1",
     "express": "^5.1.0",
     "express-rate-limit": "^8.5.2",
-    "ioredis": "^5.10.0",
+    "ioredis": "^5.11.0",
     "zod": "^4.4.1"
   },
   "overrides": {
