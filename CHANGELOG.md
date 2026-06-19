@@ -5,6 +5,13 @@ All notable changes to the Elnora MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.1.7](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v1.1.6...mcp-server-v1.1.7) (2026-06-19)
+
+
+### Bug Fixes
+
+* pin mcp-server ECS deploys to image digest ([#239](https://github.com/Elnora-AI/elnora-mcp-server/issues/239)) ([45511ab](https://github.com/Elnora-AI/elnora-mcp-server/commit/45511ab991d4bd22058dd5f3bd4567a210f32c94))
+
 ## [1.1.6](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v1.1.5...mcp-server-v1.1.6) (2026-06-17)
 
 
