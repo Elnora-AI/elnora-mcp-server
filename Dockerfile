@@ -1,4 +1,4 @@
-FROM node:24.17.0-trixie-slim AS builder
+FROM node:26.3.1-trixie-slim AS builder
 WORKDIR /app
 RUN apt-get update && \
     apt-get upgrade -y --no-install-recommends && \
@@ -10,7 +10,7 @@ COPY tsconfig.json ./
 COPY src/ ./src/
 RUN npm run build
 
-FROM node:24.17.0-trixie-slim
+FROM node:26.3.1-trixie-slim
 WORKDIR /app
 ENV NODE_ENV=production
 RUN apt-get update && \
