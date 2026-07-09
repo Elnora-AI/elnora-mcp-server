@@ -107,6 +107,37 @@ for (const [cat, fn] of REGISTRATIONS) {
 }
 
 // ---------------------------------------------------------------------------
+// exclude staff-only tools from the PUBLIC catalog
+// ---------------------------------------------------------------------------
+// docs.elnora.ai is public. A handful of tools are SystemAdmin/staff-only (they
+// still work on the server for admins — this only stops them being *documented*).
+// We filter by the same markers the docs safety-scan enforces, so the generated
+// catalog can never trip the publish gate: an explicit name denylist (intent)
+// plus the "(admin)" / "SystemAdmin" description convention (auto-covers any new
+// staff-only tool that follows the same convention). The ToolAnnotations type is
+// a closed zod object, so a per-tool `internal` annotation isn't an option — the
+// docs generator is the right layer for this docs-publishing policy.
+const INTERNAL_TOOL_NAMES = new Set([
+	"elnora_account_users",
+	"elnora_account_addLegalDoc",
+	"elnora_account_updateLegalDoc",
+	"elnora_account_deleteLegalDoc",
+	"elnora_orgs_listAll",
+]);
+function isInternalTool(t: Captured): boolean {
+	if (INTERNAL_TOOL_NAMES.has(t.name)) return true;
+	const desc = t.config.description ?? "";
+	return /\bSystemAdmin\b/.test(desc) || /\(admin\)/i.test(desc);
+}
+const excluded = tools.filter(isInternalTool).map((t) => t.name);
+for (let i = tools.length - 1; i >= 0; i--) {
+	if (isInternalTool(tools[i])) tools.splice(i, 1);
+}
+if (excluded.length) {
+	console.log(`Excluded ${excluded.length} staff-only tool(s) from the public catalog: ${excluded.join(", ")}`);
+}
+
+// ---------------------------------------------------------------------------
 // helpers (MDX + table safe) — mirror the CLI generator
 // ---------------------------------------------------------------------------
 function inlineText(s: string | undefined): string {
