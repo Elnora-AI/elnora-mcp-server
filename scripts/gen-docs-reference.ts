@@ -112,10 +112,11 @@ for (const [cat, fn] of REGISTRATIONS) {
 function inlineText(s: string | undefined): string {
 	return (s ?? "")
 		.replace(/\r?\n+/g, " ")
+		.replace(/&/g, "&amp;")
+		.replace(/</g, "&lt;")
 		.replace(/\{/g, "&#123;")
 		.replace(/\}/g, "&#125;")
-		.replace(/</g, "&lt;")
-		.replace(/\|/g, "\\|")
+		.replace(/\|/g, "&#124;")
 		.trim();
 }
 function frontmatterValue(s: string): string {
