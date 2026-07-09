@@ -26,7 +26,7 @@ export function registerFileTools(
       title: "elnora_files_list",
       description: "List files in a project",
       inputSchema: {
-        project: z.string().uuid().describe("Project UUID"),
+        project: z.string().uuid().optional().describe("Project UUID (optional; defaults to your workspace)"),
         page: z.number().int().min(1).default(1).describe("Page number"),
         pageSize: z.number().int().min(1).max(100).default(25).describe("Results per page"),
 
@@ -36,7 +36,11 @@ export function registerFileTools(
     },
     withGuard("elnora_files_list", getContext, async ({ project, page, pageSize }) => {
       try {
-        const result = await getClient().get(`/projects/${project}/files`, { page, pageSize });
+        // project is optional: with a project keep the legacy project-scoped listing;
+        // without one, list every file in the caller's workspace via GET /folders/files.
+        const result = project
+          ? await getClient().get(`/projects/${project}/files`, { page, pageSize })
+          : await getClient().get("/folders/files");
         return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
@@ -94,7 +98,7 @@ export function registerFileTools(
       title: "elnora_files_create",
       description: "Create a new file",
       inputSchema: {
-        project: z.string().uuid().describe("Project UUID"),
+        project: z.string().uuid().optional().describe("Project UUID (optional; defaults to your workspace)"),
         name: z.string().min(1).max(255).describe("Filename"),
         folder: z.string().uuid().optional().describe("Folder UUID"),
         type: z.string().optional().describe("File type"),
@@ -106,7 +110,9 @@ export function registerFileTools(
     withGuard("elnora_files_create", getContext, async ({ project, name, folder, type }) => {
       try {
         const result = await getClient().post("/files", {
-          projectId: project, name, folderId: folder, fileType: type,
+          // project is optional: omitted → backend uses the caller's default workspace.
+          ...(project ? { projectId: project } : {}),
+          name, folderId: folder, fileType: type,
         });
         return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
       } catch (error) {
@@ -121,7 +127,7 @@ export function registerFileTools(
       title: "elnora_files_upload",
       description: "Upload a file to a project (three-stage: presign, PUT, confirm)",
       inputSchema: {
-        project: z.string().uuid().describe("Project UUID"),
+        project: z.string().uuid().optional().describe("Project UUID (optional; defaults to your workspace)"),
         filePath: z.string().min(1).describe("Local file path (CLI only)"),
         fileName: z.string().optional().describe("Override filename"),
         contentType: z.string().optional().describe("MIME type"),
@@ -147,7 +153,7 @@ export function registerFileTools(
       title: "elnora_files_uploadBatch",
       description: "Upload multiple files to a project (max 50)",
       inputSchema: {
-        project: z.string().uuid().describe("Project UUID"),
+        project: z.string().uuid().optional().describe("Project UUID (optional; defaults to your workspace)"),
         filePaths: z.array(z.string().min(1)).max(50).describe("Local file paths (CLI only)"),
         folder: z.string().uuid().optional().describe("Folder UUID"),
 
@@ -385,7 +391,7 @@ export function registerFileTools(
       description: "Fork a file to another project",
       inputSchema: {
         fileId: z.string().uuid().describe("File UUID"),
-        targetProject: z.string().uuid().describe("Target project UUID"),
+        targetProject: z.string().uuid().optional().describe("Target project UUID (optional; defaults to your workspace)"),
 
         ...OUTPUT_OPTIONS_SCHEMA,
       },
@@ -393,7 +399,10 @@ export function registerFileTools(
     },
     withGuard("elnora_files_fork", getContext, async ({ fileId, targetProject }) => {
       try {
-        const result = await getClient().post(`/files/${fileId}/fork`, { targetProjectId: targetProject });
+        // target project is optional: omitted → backend forks into the caller's default workspace.
+        const result = await getClient().post(`/files/${fileId}/fork`, {
+          ...(targetProject ? { targetProjectId: targetProject } : {}),
+        });
         return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
