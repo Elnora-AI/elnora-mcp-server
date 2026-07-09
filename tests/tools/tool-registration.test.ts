@@ -46,7 +46,7 @@ describe("Tool Registration", () => {
       projects: ["elnora_projects_list", "elnora_projects_get", "elnora_projects_create", "elnora_projects_update", "elnora_projects_archive", "elnora_projects_members", "elnora_projects_addMember", "elnora_projects_updateRole", "elnora_projects_removeMember", "elnora_projects_leave"],
       search: ["elnora_search_tasks", "elnora_search_files", "elnora_search_all", "elnora_search_fileContent"],
       orgs: ["elnora_orgs_list", "elnora_orgs_get", "elnora_orgs_create", "elnora_orgs_update", "elnora_orgs_delete", "elnora_orgs_members", "elnora_orgs_updateRole", "elnora_orgs_removeMember", "elnora_orgs_billing", "elnora_orgs_setStripe", "elnora_orgs_setDefault", "elnora_orgs_invite", "elnora_orgs_invitations", "elnora_orgs_cancelInvite", "elnora_orgs_resendInvite", "elnora_orgs_invitationInfo", "elnora_orgs_acceptInvite", "elnora_orgs_files", "elnora_orgs_listAll"],
-      folders: ["elnora_folders_list", "elnora_folders_create", "elnora_folders_rename", "elnora_folders_move", "elnora_folders_delete"],
+      folders: ["elnora_folders_roots", "elnora_folders_children", "elnora_folders_get", "elnora_folders_files", "elnora_folders_list", "elnora_folders_create", "elnora_folders_rename", "elnora_folders_move", "elnora_folders_delete"],
       library: ["elnora_library_files", "elnora_library_folders", "elnora_library_createFolder", "elnora_library_renameFolder", "elnora_library_deleteFolder"],
       apiKeys: ["elnora_api-keys_list", "elnora_api-keys_create", "elnora_api-keys_revoke", "elnora_api-keys_getPolicy", "elnora_api-keys_setPolicy"],
       audit: ["elnora_audit_list"],
