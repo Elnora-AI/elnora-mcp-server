@@ -2,7 +2,6 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { createRequire } from "node:module";
 import type { ElnoraApiClient } from "./services/elnora-api-client.js";
 import { registerTaskTools } from "./tools/tasks.js";
-import { registerMessageTools } from "./tools/messages.js";
 import { registerFileTools } from "./tools/files.js";
 import { registerProtocolTools } from "./tools/protocols.js";
 import { registerProjectTools } from "./tools/projects.js";
@@ -37,9 +36,8 @@ export function createElnoraServer(
 
   const getClient = () => getContext().client;
 
-  // Core tools
+  // Core tools — tasks handles messages too (tasks.send + tasks.messages)
   registerTaskTools(server, getClient, getContext);
-  registerMessageTools(server, getClient, getContext);
   registerFileTools(server, getClient, getContext);
   registerProtocolTools(server, getClient, getContext);
 

@@ -5,6 +5,237 @@ All notable changes to the Elnora MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.1.8](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v1.1.7...mcp-server-v1.1.8) (2026-06-21)
+
+
+### Bug Fixes
+
+* **docker:** bump base image ([#245](https://github.com/Elnora-AI/elnora-mcp-server/issues/245)) ([65e8db3](https://github.com/Elnora-AI/elnora-mcp-server/commit/65e8db363573a47262a8ea275a7f1ab6d01f82e8))
+* **docker:** bump base image ([#247](https://github.com/Elnora-AI/elnora-mcp-server/issues/247)) ([f011712](https://github.com/Elnora-AI/elnora-mcp-server/commit/f0117123537c23bd14c8d536adc7546c6a80f6fc))
+
+## [1.1.7](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v1.1.6...mcp-server-v1.1.7) (2026-06-19)
+
+
+### Bug Fixes
+
+* pin mcp-server ECS deploys to image digest ([#239](https://github.com/Elnora-AI/elnora-mcp-server/issues/239)) ([45511ab](https://github.com/Elnora-AI/elnora-mcp-server/commit/45511ab991d4bd22058dd5f3bd4567a210f32c94))
+
+## [1.1.6](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v1.1.5...mcp-server-v1.1.6) (2026-06-17)
+
+
+### Bug Fixes
+
+* **deps:** bump hono from 4.12.21 to 4.12.25 ([#237](https://github.com/Elnora-AI/elnora-mcp-server/issues/237)) ([605ee76](https://github.com/Elnora-AI/elnora-mcp-server/commit/605ee764acf45f254d3b1d2bd4472a913d078abb))
+
+## [1.1.5](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v1.1.4...mcp-server-v1.1.5) (2026-06-16)
+
+
+### Bug Fixes
+
+* **deps:** bump form-data from 4.0.5 to 4.0.6 ([#234](https://github.com/Elnora-AI/elnora-mcp-server/issues/234)) ([fb6f156](https://github.com/Elnora-AI/elnora-mcp-server/commit/fb6f1560291fb1138dcd0a636185c7b8b22dc5d5))
+
+## [1.1.4](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v1.1.3...mcp-server-v1.1.4) (2026-06-16)
+
+
+### Bug Fixes
+
+* **docker:** bump base image ([#229](https://github.com/Elnora-AI/elnora-mcp-server/issues/229)) ([0a6e150](https://github.com/Elnora-AI/elnora-mcp-server/commit/0a6e150e08f67c36cc51661e982231ece0e42692))
+
+## [1.1.3](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v1.1.2...mcp-server-v1.1.3) (2026-06-05)
+
+
+### Bug Fixes
+
+* **deps:** bump hono from 4.12.18 to 4.12.21 ([#221](https://github.com/Elnora-AI/elnora-mcp-server/issues/221)) ([0fef592](https://github.com/Elnora-AI/elnora-mcp-server/commit/0fef592f1e716160683cef875fe28d87f27f232f))
+
+## [1.1.2](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v1.1.1...mcp-server-v1.1.2) (2026-05-25)
+
+
+### Bug Fixes
+
+* **deps:** bump qs from 6.15.0 to 6.15.2 ([#213](https://github.com/Elnora-AI/elnora-mcp-server/issues/213)) ([cc98734](https://github.com/Elnora-AI/elnora-mcp-server/commit/cc987341d92f9ca7f70f6250435b2857b0824b13))
+
+## [1.1.1](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v1.1.0...mcp-server-v1.1.1) (2026-05-19)
+
+
+### Bug Fixes
+
+* **orgs:** use stripeCustomerId in set-stripe wire payload ([#207](https://github.com/Elnora-AI/elnora-mcp-server/issues/207)) ([6b2f7c6](https://github.com/Elnora-AI/elnora-mcp-server/commit/6b2f7c635a3487dcea7ad75159cd3e3dc9eee365))
+
+## [1.1.0](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v1.0.5...mcp-server-v1.1.0) (2026-05-15)
+
+
+### Features
+
+* add periodic heartbeat log task ([#204](https://github.com/Elnora-AI/elnora-mcp-server/issues/204)) ([5f3744f](https://github.com/Elnora-AI/elnora-mcp-server/commit/5f3744fe9fe8f96438ddb4287dbe19ab8d1b377d))
+
+## [1.0.5](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v1.0.4...mcp-server-v1.0.5) (2026-05-12)
+
+
+### Bug Fixes
+
+* **deps:** bump 2 dependencies ([#196](https://github.com/Elnora-AI/elnora-mcp-server/issues/196)) ([1393f88](https://github.com/Elnora-AI/elnora-mcp-server/commit/1393f8838e95b6b48286ff3d5d5b45f718030e6b))
+* **deps:** bump hono from 4.12.14 to 4.12.16 ([#192](https://github.com/Elnora-AI/elnora-mcp-server/issues/192)) ([05457ce](https://github.com/Elnora-AI/elnora-mcp-server/commit/05457ce74b95ac0494b3ef48c7f476db6ef31dad))
+
+## [1.0.4](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v1.0.3...mcp-server-v1.0.4) (2026-05-06)
+
+
+### Bug Fixes
+
+* **docker:** bump base to debian 13 + refresh deps ([#188](https://github.com/Elnora-AI/elnora-mcp-server/issues/188)) ([99b0d4a](https://github.com/Elnora-AI/elnora-mcp-server/commit/99b0d4ad6a72574e26743f50f5ecce80af551c41))
+
+## [1.0.3](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v1.0.2...mcp-server-v1.0.3) (2026-04-28)
+
+
+### Bug Fixes
+
+* **docker:** publish openssl upgrade ([#184](https://github.com/Elnora-AI/elnora-mcp-server/issues/184)) ([3afe478](https://github.com/Elnora-AI/elnora-mcp-server/commit/3afe4782e1953d50246d656466728143384b7a02))
+
+## [1.0.2](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v1.0.1...mcp-server-v1.0.2) (2026-04-25)
+
+
+### Bug Fixes
+
+* **docker:** upgrade openssl to remediate 8 CVEs ([#177](https://github.com/Elnora-AI/elnora-mcp-server/issues/177)) ([8da47f6](https://github.com/Elnora-AI/elnora-mcp-server/commit/8da47f68bf113bdd1af81655675668ebe30e66e6)), closes [#174](https://github.com/Elnora-AI/elnora-mcp-server/issues/174) [#128](https://github.com/Elnora-AI/elnora-mcp-server/issues/128) [#63](https://github.com/Elnora-AI/elnora-mcp-server/issues/63) [#142](https://github.com/Elnora-AI/elnora-mcp-server/issues/142) [#144](https://github.com/Elnora-AI/elnora-mcp-server/issues/144) [#143](https://github.com/Elnora-AI/elnora-mcp-server/issues/143) [#172](https://github.com/Elnora-AI/elnora-mcp-server/issues/172)
+
+## [1.0.1](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v1.0.0...mcp-server-v1.0.1) (2026-04-24)
+
+
+### Bug Fixes
+
+* **docker:** upgrade openssl to remediate 5 HIGH CVEs (Inspector findings) ([#167](https://github.com/Elnora-AI/elnora-mcp-server/issues/167)) ([2069460](https://github.com/Elnora-AI/elnora-mcp-server/commit/2069460718d905e3b4c3e78d3358c3b60cf1d66a)), closes [#128](https://github.com/Elnora-AI/elnora-mcp-server/issues/128) [#63](https://github.com/Elnora-AI/elnora-mcp-server/issues/63) [#142](https://github.com/Elnora-AI/elnora-mcp-server/issues/142) [#144](https://github.com/Elnora-AI/elnora-mcp-server/issues/144) [#143](https://github.com/Elnora-AI/elnora-mcp-server/issues/143)
+
+## [1.0.0](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v0.13.0...mcp-server-v1.0.0) (2026-04-21)
+
+
+### ⚠ BREAKING CHANGES
+
+* **tools:** align tool names with CLI registry (v1.0.0) ([#163](https://github.com/Elnora-AI/elnora-mcp-server/issues/163))
+
+### Features
+
+* **tools:** align tool names with CLI registry (v1.0.0) ([#163](https://github.com/Elnora-AI/elnora-mcp-server/issues/163)) ([caa18ec](https://github.com/Elnora-AI/elnora-mcp-server/commit/caa18ec304060a4572953c2fb3d8bfec02b5fc35))
+
+## [0.13.0](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v0.12.3...mcp-server-v0.13.0) (2026-04-16)
+
+
+### Features
+
+* **ci:** batch safe Dependabot updates twice weekly ([#157](https://github.com/Elnora-AI/elnora-mcp-server/issues/157)) ([5733de8](https://github.com/Elnora-AI/elnora-mcp-server/commit/5733de8d06555868ef5fdd5576534d914e479b00))
+
+
+### Bug Fixes
+
+* **ci:** add id-token permission for dep-batch-review OIDC auth ([#159](https://github.com/Elnora-AI/elnora-mcp-server/issues/159)) ([efd52e8](https://github.com/Elnora-AI/elnora-mcp-server/commit/efd52e8b2b03569b3e2fdb24b5b63bace1592f64))
+* **deps:** automated vulnerability remediation 2026-04-15 ([#150](https://github.com/Elnora-AI/elnora-mcp-server/issues/150)) ([ec2d80f](https://github.com/Elnora-AI/elnora-mcp-server/commit/ec2d80f7e16b70f7dbed7613f9fc5fd74228d89a))
+* **deps:** automated vulnerability remediation 2026-04-15 ([#153](https://github.com/Elnora-AI/elnora-mcp-server/issues/153)) ([d89b99b](https://github.com/Elnora-AI/elnora-mcp-server/commit/d89b99b5b50e2b43e4da46099be2dc7961454c4b))
+* **deps:** automated vulnerability remediation 2026-04-16 ([#156](https://github.com/Elnora-AI/elnora-mcp-server/issues/156)) ([233d577](https://github.com/Elnora-AI/elnora-mcp-server/commit/233d577bd96db60b6ff93da62d44bac666d5cb15)), closes [#155](https://github.com/Elnora-AI/elnora-mcp-server/issues/155)
+
+## [0.12.3](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v0.12.2...mcp-server-v0.12.3) (2026-04-15)
+
+
+### Bug Fixes
+
+* **deps:** automated vulnerability remediation 2026-04-11 ([#141](https://github.com/Elnora-AI/elnora-mcp-server/issues/141)) ([e7bcece](https://github.com/Elnora-AI/elnora-mcp-server/commit/e7bcece41ceb68c052f16e0e9547daec750e7ce9)), closes [#139](https://github.com/Elnora-AI/elnora-mcp-server/issues/139)
+* **deps:** automated vulnerability remediation 2026-04-12 ([#147](https://github.com/Elnora-AI/elnora-mcp-server/issues/147)) ([322c58b](https://github.com/Elnora-AI/elnora-mcp-server/commit/322c58b938eef4bd054c0226a537366a5c952572)), closes [#139](https://github.com/Elnora-AI/elnora-mcp-server/issues/139)
+* **docker:** update node:24-slim base image to patch OpenSSL CVEs ([#133](https://github.com/Elnora-AI/elnora-mcp-server/issues/133)) ([f589d6a](https://github.com/Elnora-AI/elnora-mcp-server/commit/f589d6aeca3101007f53647dd7d6308da68fc4e2))
+
+## [0.12.2](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v0.12.1...mcp-server-v0.12.2) (2026-04-08)
+
+
+### Bug Fixes
+
+* **ci:** add GitHub issue cross-references to auto-fix PRs ([#132](https://github.com/Elnora-AI/elnora-mcp-server/issues/132)) ([e2fd917](https://github.com/Elnora-AI/elnora-mcp-server/commit/e2fd91790b715ac1b774c59ac4d5179fa59d10f5))
+* **ci:** use correct model ID for claude-code-action ([#127](https://github.com/Elnora-AI/elnora-mcp-server/issues/127)) ([cbc249b](https://github.com/Elnora-AI/elnora-mcp-server/commit/cbc249bfc3610f162efb9fec2e0d00e85cd09ea6))
+* **deps:** automated vulnerability remediation 2026-04-08 ([#131](https://github.com/Elnora-AI/elnora-mcp-server/issues/131)) ([35bb647](https://github.com/Elnora-AI/elnora-mcp-server/commit/35bb647ad7f9ac6010eb6948a74ce9d112feb76b))
+
+## [0.12.1](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v0.12.0...mcp-server-v0.12.1) (2026-04-08)
+
+
+### Bug Fixes
+
+* **ci:** correct claude-code-action parameters and permissions ([#125](https://github.com/Elnora-AI/elnora-mcp-server/issues/125)) ([e9d2d48](https://github.com/Elnora-AI/elnora-mcp-server/commit/e9d2d48f501f1d326d2915c3c22578ad55160161))
+
+## [0.12.0](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v0.11.1...mcp-server-v0.12.0) (2026-04-08)
+
+
+### Features
+
+* **ci:** automated vulnerability remediation pipeline ([#123](https://github.com/Elnora-AI/elnora-mcp-server/issues/123)) ([2b32240](https://github.com/Elnora-AI/elnora-mcp-server/commit/2b322406164a709cce06f2c6c7b342b76bd0002a))
+
+## [0.11.1](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v0.11.0...mcp-server-v0.11.1) (2026-04-08)
+
+
+### Bug Fixes
+
+* **deps:** patch vite to &gt;=8.0.5 for SEC-304, SEC-305, SEC-306 ([#112](https://github.com/Elnora-AI/elnora-mcp-server/issues/112)) ([15b5b8e](https://github.com/Elnora-AI/elnora-mcp-server/commit/15b5b8eb394470c0fb42908f8b49be8080a00581))
+
+## [0.11.0](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v0.10.6...mcp-server-v0.11.0) (2026-03-31)
+
+
+### Features
+
+* consume platform refresh tokens for 30-day MCP sessions (ELN-513) ([#100](https://github.com/Elnora-AI/elnora-mcp-server/issues/100)) ([a04e6c6](https://github.com/Elnora-AI/elnora-mcp-server/commit/a04e6c697abd87e0043448770211ab09e15b7a03))
+
+## [0.10.6](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v0.10.5...mcp-server-v0.10.6) (2026-03-31)
+
+
+### Bug Fixes
+
+* **deps:** resolve SEC-274, SEC-275, SEC-276 dependency vulnerabilities ([#98](https://github.com/Elnora-AI/elnora-mcp-server/issues/98)) ([4d8e3a0](https://github.com/Elnora-AI/elnora-mcp-server/commit/4d8e3a0bae52676ee6dfb23f89ca22cf366833a3))
+
+## [0.10.5](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v0.10.4...mcp-server-v0.10.5) (2026-03-30)
+
+
+### Bug Fixes
+
+* persist OAuth client registrations in Redis (ELN-570) ([#96](https://github.com/Elnora-AI/elnora-mcp-server/issues/96)) ([1f04d9d](https://github.com/Elnora-AI/elnora-mcp-server/commit/1f04d9d050f7ea2d886f7a08d332bb21d8a107cb))
+
+## [0.10.4](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v0.10.3...mcp-server-v0.10.4) (2026-03-27)
+
+
+### Bug Fixes
+
+* retrigger release-please after branch cleanup ([#88](https://github.com/Elnora-AI/elnora-mcp-server/issues/88)) ([da04df0](https://github.com/Elnora-AI/elnora-mcp-server/commit/da04df0840d60cf7af0e19071ebc013da6d2a10e))
+* update node:24-slim base image digest ([#87](https://github.com/Elnora-AI/elnora-mcp-server/issues/87)) ([0b47813](https://github.com/Elnora-AI/elnora-mcp-server/commit/0b4781389f999b1548d979b939b8c1a18f4cfa8f))
+
+## [0.10.3](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v0.10.2...mcp-server-v0.10.3) (2026-03-27)
+
+
+### Bug Fixes
+
+* trigger release for dependency security patches ([#85](https://github.com/Elnora-AI/elnora-mcp-server/issues/85)) ([b475c8a](https://github.com/Elnora-AI/elnora-mcp-server/commit/b475c8a0d9fdade0fb3e3e34c6747e3cef5487e9))
+
+## [0.10.2](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v0.10.1...mcp-server-v0.10.2) (2026-03-26)
+
+
+### Bug Fixes
+
+* upgrade picomatch to 4.0.4 for CVE-2026-33672 ([#76](https://github.com/Elnora-AI/elnora-mcp-server/issues/76)) ([1ad0824](https://github.com/Elnora-AI/elnora-mcp-server/commit/1ad0824fe465f67b7de1dcde0db1d6b9eb5163e0))
+
+## [0.10.1](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v0.10.0...mcp-server-v0.10.1) (2026-03-24)
+
+
+### Bug Fixes
+
+* override tar and minimatch to resolve remaining CVEs ([#70](https://github.com/Elnora-AI/elnora-mcp-server/issues/70)) ([4e280c8](https://github.com/Elnora-AI/elnora-mcp-server/commit/4e280c840a9ac4255a6f662f331d032737a4a694))
+
+## [0.10.0](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v0.9.1...mcp-server-v0.10.0) (2026-03-24)
+
+
+### Features
+
+* upgrade from Node 22 to Node 24 LTS ([#68](https://github.com/Elnora-AI/elnora-mcp-server/issues/68)) ([d47ae00](https://github.com/Elnora-AI/elnora-mcp-server/commit/d47ae004384426a53e7f03be8cef961de923d1af))
+
+## [0.9.1](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v0.9.0...mcp-server-v0.9.1) (2026-03-23)
+
+
+### Bug Fixes
+
+* enable trust proxy for ALB compatibility ([#35](https://github.com/Elnora-AI/elnora-mcp-server/issues/35)) ([c942b08](https://github.com/Elnora-AI/elnora-mcp-server/commit/c942b08c36f3d072e29b141983586024c1f68027))
+* filter Inspector findings to MCP server ECR repo only ([#65](https://github.com/Elnora-AI/elnora-mcp-server/issues/65)) ([6d5f773](https://github.com/Elnora-AI/elnora-mcp-server/commit/6d5f7733ba79650e930d838d5e92b98f9f739240))
+* resolve 13 AWS Inspector vulnerabilities ([#66](https://github.com/Elnora-AI/elnora-mcp-server/issues/66)) ([4117764](https://github.com/Elnora-AI/elnora-mcp-server/commit/41177647e774315c6f2c88c0aa3b5a5816e3acc5))
+
 ## [0.9.0](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v0.8.0...mcp-server-v0.9.0) (2026-03-14)
 
 

@@ -12,16 +12,16 @@ export function registerApiKeyTools(
   getContext: () => RequestContext,
 ): void {
   server.registerTool(
-    "elnora_list_api_keys",
+    "elnora_api-keys_list",
     {
-      title: "List API Keys",
-      description: "List all personal API keys.",
+      title: "elnora_api-keys_list",
+      description: "List all API keys",
       inputSchema: {
         ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
-    withGuard("elnora_list_api_keys", getContext, async () => {
+    withGuard("elnora_api-keys_list", getContext, async () => {
       try {
         const result = await getClient().get("/api-keys");
         return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
@@ -32,10 +32,10 @@ export function registerApiKeyTools(
   );
 
   server.registerTool(
-    "elnora_create_api_key",
+    "elnora_api-keys_create",
     {
-      title: "Create API Key",
-      description: "Create a new personal API key.",
+      title: "elnora_api-keys_create",
+      description: "Create a new API key",
       inputSchema: {
         name: z.string().min(1).max(200).describe("Key name"),
         scopes: z.array(z.string()).optional().describe("Optional scopes"),
@@ -44,7 +44,7 @@ export function registerApiKeyTools(
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
-    withGuard("elnora_create_api_key", getContext, async ({ name, scopes }) => {
+    withGuard("elnora_api-keys_create", getContext, async ({ name, scopes }) => {
       try {
         const result = await getClient().post("/api-keys", { name, scopes });
         return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
@@ -55,21 +55,63 @@ export function registerApiKeyTools(
   );
 
   server.registerTool(
-    "elnora_revoke_api_key",
+    "elnora_api-keys_revoke",
     {
-      title: "Revoke API Key",
-      description: "Revoke (delete) an API key.",
+      title: "elnora_api-keys_revoke",
+      description: "Revoke an API key",
       inputSchema: {
-        key_id: z.string().min(1).max(255).describe("API key ID"),
+        keyId: z.string().min(1).max(255).describe("API key ID"),
 
         ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
     },
-    withGuard("elnora_revoke_api_key", getContext, async ({ key_id }) => {
+    withGuard("elnora_api-keys_revoke", getContext, async ({ keyId }) => {
       try {
-        await getClient().del(`/api-keys/${key_id}`);
-        return { content: [{ type: "text" as const, text: JSON.stringify({ revoked: true, keyId: key_id }) }] };
+        await getClient().del(`/api-keys/${keyId}`);
+        return { content: [{ type: "text" as const, text: JSON.stringify({ revoked: true, keyId }) }] };
+      } catch (error) {
+        return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
+      }
+    }),
+  );
+
+  server.registerTool(
+    "elnora_api-keys_getPolicy",
+    {
+      title: "elnora_api-keys_getPolicy",
+      description: "Get the API key creation policy",
+      inputSchema: {
+        ...OUTPUT_OPTIONS_SCHEMA,
+      },
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+    },
+    withGuard("elnora_api-keys_getPolicy", getContext, async () => {
+      try {
+        const result = await getClient().get("/api-keys/policy");
+        return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
+      } catch (error) {
+        return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
+      }
+    }),
+  );
+
+  server.registerTool(
+    "elnora_api-keys_setPolicy",
+    {
+      title: "elnora_api-keys_setPolicy",
+      description: "Set the API key creation policy",
+      inputSchema: {
+        policy: z.record(z.string(), z.unknown()).describe("Policy object"),
+
+        ...OUTPUT_OPTIONS_SCHEMA,
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+    },
+    withGuard("elnora_api-keys_setPolicy", getContext, async ({ policy }) => {
+      try {
+        const result = await getClient().put("/api-keys/policy", policy);
+        return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
       }

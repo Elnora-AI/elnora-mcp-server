@@ -30,6 +30,14 @@ export interface TokenStore {
   setValidationCache(accessToken: string, epochSeconds: number, ttlSeconds: number): Promise<void>;
   deleteValidationCache(accessToken: string): Promise<void>;
 
+  // --- API-key validation cache (keyHash → { userId }) ---
+  // Separate from the OAuth validation cache above: OAuth caches "last
+  // validated at", this caches the full result so the caller can skip
+  // the validation round-trip entirely.
+  getApiKeyValidation(keyHash: string): Promise<{ userId: string } | undefined>;
+  setApiKeyValidation(keyHash: string, data: { userId: string }, ttlSeconds: number): Promise<void>;
+  deleteApiKeyValidation(keyHash: string): Promise<void>;
+
   // --- Lifecycle ---
   ping(): Promise<void>;
   disconnect(): Promise<void>;

@@ -1,110 +1,127 @@
 /**
  * Per-tool scope enforcement.
  * CoSAI MCP-T2: Least privilege — each tool declares required scopes.
+ *
+ * Keep aligned with elnora-cli command scopes (audit script enforces parity).
  */
 export const TOOL_SCOPES: Record<string, string[]> = {
-  // Tasks
-  elnora_list_tasks: ["tasks:read"],
-  elnora_get_task: ["tasks:read"],
-  elnora_get_task_messages: ["messages:read"],
-  elnora_create_task: ["tasks:write"],
-  elnora_update_task: ["tasks:write"],
-  elnora_archive_task: ["tasks:write"],
+  // Health
+  elnora_health_check: [],
 
-  // Messages
-  elnora_send_message: ["messages:write"],
+  // Tasks (includes messaging)
+  elnora_tasks_list: ["tasks:read"],
+  elnora_tasks_get: ["tasks:read"],
+  elnora_tasks_create: ["tasks:write"],
+  elnora_tasks_send: ["messages:write"],
+  elnora_tasks_messages: ["messages:read"],
+  elnora_tasks_update: ["tasks:write"],
+  elnora_tasks_archive: ["tasks:write"],
 
   // Files
-  elnora_list_files: ["files:read"],
-  elnora_get_file: ["files:read"],
-  elnora_get_file_content: ["files:read"],
-  elnora_get_file_versions: ["files:read"],
-  elnora_get_version_content: ["files:read"],
-  elnora_upload_file: ["files:write"],
-  elnora_create_file: ["files:write"],
-  elnora_update_file: ["files:write"],
-  elnora_archive_file: ["files:write"],
-  elnora_download_file: ["files:read"],
-  elnora_create_version: ["files:write"],
-  elnora_restore_version: ["files:write"],
-  elnora_promote_file: ["files:write"],
-  elnora_fork_file: ["files:write"],
-  elnora_create_working_copy: ["files:write"],
-  elnora_commit_working_copy: ["files:write"],
-  elnora_initiate_upload: ["files:write"],
-  elnora_confirm_upload: ["files:write"],
+  elnora_files_list: ["files:read"],
+  elnora_files_get: ["files:read"],
+  elnora_files_content: ["files:read"],
+  elnora_files_create: ["files:write"],
+  elnora_files_upload: ["files:write"],
+  elnora_files_uploadBatch: ["files:write"],
+  elnora_files_confirmUpload: ["files:write"],
+  elnora_files_download: ["files:read"],
+  elnora_files_update: ["files:write"],
+  elnora_files_archive: ["files:write"],
+  elnora_files_versions: ["files:read"],
+  elnora_files_versionContent: ["files:read"],
+  elnora_files_createVersion: ["files:write"],
+  elnora_files_restore: ["files:write"],
+  elnora_files_promote: ["files:write"],
+  elnora_files_fork: ["files:write"],
+  elnora_files_workingCopy: ["files:write"],
+  elnora_files_commit: ["files:write"],
+  elnora_files_searchContent: ["search:read"],
 
   // Projects
-  elnora_list_projects: ["projects:read"],
-  elnora_get_project: ["projects:read"],
-  elnora_create_project: ["projects:write"],
-  elnora_update_project: ["projects:write"],
-  elnora_archive_project: ["projects:write"],
-  elnora_list_project_members: ["projects:read"],
-  elnora_add_project_member: ["projects:write"],
-  elnora_update_project_member_role: ["projects:write"],
-  elnora_remove_project_member: ["projects:write"],
-  elnora_leave_project: ["projects:write"],
+  elnora_projects_list: ["projects:read"],
+  elnora_projects_get: ["projects:read"],
+  elnora_projects_create: ["projects:write"],
+  elnora_projects_update: ["projects:write"],
+  elnora_projects_archive: ["projects:write"],
+  elnora_projects_members: ["projects:read"],
+  elnora_projects_addMember: ["projects:write"],
+  elnora_projects_updateRole: ["projects:write"],
+  elnora_projects_removeMember: ["projects:write"],
+  elnora_projects_leave: ["projects:write"],
+
+  // Orgs
+  elnora_orgs_list: ["orgs:read"],
+  elnora_orgs_get: ["orgs:read"],
+  elnora_orgs_create: ["orgs:write"],
+  elnora_orgs_update: ["orgs:write"],
+  elnora_orgs_delete: ["orgs:write"],
+  elnora_orgs_members: ["orgs:read"],
+  elnora_orgs_updateRole: ["orgs:write"],
+  elnora_orgs_removeMember: ["orgs:write"],
+  elnora_orgs_billing: ["orgs:read"],
+  elnora_orgs_setStripe: ["orgs:write"],
+  elnora_orgs_setDefault: ["orgs:write"],
+  elnora_orgs_invite: ["orgs:write"],
+  elnora_orgs_invitations: ["orgs:read"],
+  elnora_orgs_cancelInvite: ["orgs:write"],
+  elnora_orgs_resendInvite: ["orgs:write"],
+  elnora_orgs_invitationInfo: [],
+  elnora_orgs_acceptInvite: ["orgs:write"],
+  elnora_orgs_files: ["files:read"],
+  elnora_orgs_listAll: ["orgs:read"],
+
+  // Folders
+  elnora_folders_list: ["folders:read"],
+  elnora_folders_create: ["folders:write"],
+  elnora_folders_rename: ["folders:write"],
+  elnora_folders_move: ["folders:write"],
+  elnora_folders_delete: ["folders:write"],
 
   // Search
   elnora_search_tasks: ["search:read"],
   elnora_search_files: ["search:read"],
   elnora_search_all: ["search:read"],
-  elnora_search_file_content: ["search:read"],
-
-  // Organizations
-  elnora_list_orgs: ["orgs:read"],
-  elnora_get_org: ["orgs:read"],
-  elnora_create_org: ["orgs:write"],
-  elnora_update_org: ["orgs:write"],
-  elnora_list_org_members: ["orgs:read"],
-  elnora_update_org_member_role: ["orgs:write"],
-  elnora_remove_org_member: ["orgs:write"],
-  elnora_get_org_billing: ["orgs:read"],
-  elnora_invite_org_member: ["orgs:write"],
-  elnora_list_org_invitations: ["orgs:read"],
-  elnora_cancel_org_invitation: ["orgs:write"],
-  elnora_get_invitation_info: [],
-  elnora_accept_invitation: ["orgs:write"],
-
-  // Folders
-  elnora_list_folders: ["folders:read"],
-  elnora_create_folder: ["folders:write"],
-  elnora_rename_folder: ["folders:write"],
-  elnora_move_folder: ["folders:write"],
-  elnora_delete_folder: ["folders:write"],
+  elnora_search_fileContent: ["search:read"],
 
   // Library
-  elnora_list_library_files: ["library:read"],
-  elnora_list_library_folders: ["library:read"],
-  elnora_create_library_folder: ["library:write"],
-  elnora_rename_library_folder: ["library:write"],
-  elnora_delete_library_folder: ["library:write"],
-
-  // API Keys
-  elnora_list_api_keys: ["api-keys:read"],
-  elnora_create_api_key: ["api-keys:write"],
-  elnora_revoke_api_key: ["api-keys:write"],
-
-  // Audit
-  elnora_list_audit_log: ["audit:read"],
+  elnora_library_files: ["library:read"],
+  elnora_library_folders: ["library:read"],
+  elnora_library_createFolder: ["library:write"],
+  elnora_library_renameFolder: ["library:write"],
+  elnora_library_deleteFolder: ["library:write"],
 
   // Account
-  elnora_get_account: ["account:read"],
-  elnora_update_account: ["account:write"],
-  elnora_list_agreements: ["account:read"],
-  elnora_accept_terms: ["account:write"],
+  elnora_account_get: ["account:read"],
+  elnora_account_update: ["account:write"],
+  elnora_account_agreements: ["account:read"],
+  elnora_account_acceptTerms: ["account:write"],
+  elnora_account_delete: ["account:write"],
+  elnora_account_users: ["account:read"],
+  elnora_account_addLegalDoc: ["account:write"],
+  elnora_account_updateLegalDoc: ["account:write"],
+  elnora_account_deleteLegalDoc: ["account:write"],
+
+  // API Keys
+  "elnora_api-keys_list": ["api-keys:read"],
+  "elnora_api-keys_create": ["api-keys:write"],
+  "elnora_api-keys_revoke": ["api-keys:write"],
+  "elnora_api-keys_getPolicy": ["api-keys:read"],
+  "elnora_api-keys_setPolicy": ["api-keys:write"],
+
+  // Audit
+  elnora_audit_list: ["audit:read"],
 
   // Feedback
-  elnora_submit_feedback: ["feedback:write"],
+  elnora_feedback_submit: ["feedback:write"],
 
-  // Protocol (convenience)
-  elnora_generate_protocol: ["tasks:write", "messages:write"],
+  // Flags
+  elnora_flags_list: [],
+  elnora_flags_get: [],
+  elnora_flags_set: ["flags:write"],
 
-  // Flags & Health — no scopes required (public endpoints)
-  elnora_list_flags: [],
-  elnora_get_flag: [],
-  elnora_health_check: [],
+  // Protocols (aggregate)
+  elnora_protocols_generate: ["tasks:write", "messages:write"],
 };
 
 /**

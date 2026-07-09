@@ -171,4 +171,31 @@ describe.skipIf(!redisAvailable)("RedisTokenStore integration", () => {
       expect(result).toBeUndefined();
     });
   });
+
+  describe("API-key validation cache", () => {
+    it("round-trips an API-key validation result", async () => {
+      await store.setApiKeyValidation("key-hash-1", { userId: "42" }, 60);
+      const result = await store.getApiKeyValidation("key-hash-1");
+      expect(result).toEqual({ userId: "42" });
+    });
+
+    it("returns undefined for missing entries", async () => {
+      const result = await store.getApiKeyValidation("does-not-exist");
+      expect(result).toBeUndefined();
+    });
+
+    it("respects TTL", async () => {
+      await store.setApiKeyValidation("key-hash-ttl", { userId: "1" }, 1);
+      await new Promise((r) => setTimeout(r, 1500));
+      const result = await store.getApiKeyValidation("key-hash-ttl");
+      expect(result).toBeUndefined();
+    });
+
+    it("deletes on request", async () => {
+      await store.setApiKeyValidation("key-hash-del", { userId: "1" }, 60);
+      await store.deleteApiKeyValidation("key-hash-del");
+      const result = await store.getApiKeyValidation("key-hash-del");
+      expect(result).toBeUndefined();
+    });
+  });
 });

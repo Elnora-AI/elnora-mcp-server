@@ -12,24 +12,21 @@ export function registerProjectTools(
   getContext: () => RequestContext,
 ): void {
   server.registerTool(
-    "elnora_list_projects",
+    "elnora_projects_list",
     {
-      title: "List Projects",
-      description: "List all projects. Returns paginated project summaries.",
+      title: "elnora_projects_list",
+      description: "List all projects accessible to the current user",
       inputSchema: {
-        org_id: z.string().uuid().optional().describe("Organization UUID (optional, defaults to active org)"),
         page: z.number().int().min(1).default(1).describe("Page number"),
-        page_size: z.number().int().min(1).max(100).default(25).describe("Results per page"),
+        pageSize: z.number().int().min(1).max(100).default(25).describe("Results per page"),
 
         ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
-    withGuard("elnora_list_projects", getContext, async ({ org_id, page, page_size }) => {
+    withGuard("elnora_projects_list", getContext, async ({ page, pageSize }) => {
       try {
-        const client = getClient();
-        if (org_id) client.setOrgContext(org_id);
-        const result = await client.get("/projects", { page, pageSize: page_size });
+        const result = await getClient().get("/projects", { page, pageSize });
         return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
@@ -38,20 +35,20 @@ export function registerProjectTools(
   );
 
   server.registerTool(
-    "elnora_get_project",
+    "elnora_projects_get",
     {
-      title: "Get Project",
-      description: "Get a single project by UUID.",
+      title: "elnora_projects_get",
+      description: "Get details of a specific project",
       inputSchema: {
-        project_id: z.string().uuid().describe("Project UUID"),
+        projectId: z.string().uuid().describe("Project UUID"),
 
         ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
-    withGuard("elnora_get_project", getContext, async ({ project_id }) => {
+    withGuard("elnora_projects_get", getContext, async ({ projectId }) => {
       try {
-        const result = await getClient().get(`/projects/${project_id}`);
+        const result = await getClient().get(`/projects/${projectId}`);
         return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
@@ -60,12 +57,11 @@ export function registerProjectTools(
   );
 
   server.registerTool(
-    "elnora_create_project",
+    "elnora_projects_create",
     {
-      title: "Create Project",
-      description: "Create a new project.",
+      title: "elnora_projects_create",
+      description: "Create a new project",
       inputSchema: {
-        org_id: z.string().uuid().optional().describe("Organization UUID (optional, defaults to active org)"),
         name: z.string().min(1).max(200).describe("Project name"),
         description: z.string().max(2000).optional().describe("Project description"),
         icon: z.string().max(50).optional().describe("Project icon"),
@@ -74,11 +70,9 @@ export function registerProjectTools(
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
-    withGuard("elnora_create_project", getContext, async ({ org_id, name, description, icon }) => {
+    withGuard("elnora_projects_create", getContext, async ({ name, description, icon }) => {
       try {
-        const client = getClient();
-        if (org_id) client.setOrgContext(org_id);
-        const result = await client.post("/projects", { name, description, icon });
+        const result = await getClient().post("/projects", { name, description, icon });
         return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
@@ -87,12 +81,12 @@ export function registerProjectTools(
   );
 
   server.registerTool(
-    "elnora_update_project",
+    "elnora_projects_update",
     {
-      title: "Update Project",
-      description: "Update project metadata (name, description, icon).",
+      title: "elnora_projects_update",
+      description: "Update an existing project",
       inputSchema: {
-        project_id: z.string().uuid().describe("Project UUID"),
+        projectId: z.string().uuid().describe("Project UUID"),
         name: z.string().min(1).max(200).optional().describe("New name"),
         description: z.string().max(2000).optional().describe("New description"),
         icon: z.string().max(50).optional().describe("New icon"),
@@ -101,7 +95,7 @@ export function registerProjectTools(
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
-    withGuard("elnora_update_project", getContext, async ({ project_id, name, description, icon }) => {
+    withGuard("elnora_projects_update", getContext, async ({ projectId, name, description, icon }) => {
       try {
         const body: Record<string, string> = {};
         if (name !== undefined) body.name = name;
@@ -110,7 +104,7 @@ export function registerProjectTools(
         if (Object.keys(body).length === 0) {
           return { content: [{ type: "text" as const, text: "Error: At least one field (name, description, or icon) must be provided." }], isError: true };
         }
-        const result = await getClient().put(`/projects/${project_id}`, body);
+        const result = await getClient().put(`/projects/${projectId}`, body);
         return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
@@ -119,21 +113,21 @@ export function registerProjectTools(
   );
 
   server.registerTool(
-    "elnora_archive_project",
+    "elnora_projects_archive",
     {
-      title: "Archive Project",
-      description: "Archive (soft-delete) a project.",
+      title: "elnora_projects_archive",
+      description: "Archive (delete) a project",
       inputSchema: {
-        project_id: z.string().uuid().describe("Project UUID"),
+        projectId: z.string().uuid().describe("Project UUID"),
 
         ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
     },
-    withGuard("elnora_archive_project", getContext, async ({ project_id }) => {
+    withGuard("elnora_projects_archive", getContext, async ({ projectId }) => {
       try {
-        await getClient().del(`/projects/${project_id}`);
-        return { content: [{ type: "text" as const, text: JSON.stringify({ archived: true, projectId: project_id }) }] };
+        await getClient().del(`/projects/${projectId}`);
+        return { content: [{ type: "text" as const, text: JSON.stringify({ archived: true, projectId }) }] };
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
       }
@@ -141,20 +135,20 @@ export function registerProjectTools(
   );
 
   server.registerTool(
-    "elnora_list_project_members",
+    "elnora_projects_members",
     {
-      title: "List Project Members",
-      description: "List members of a project.",
+      title: "elnora_projects_members",
+      description: "List members of a project",
       inputSchema: {
-        project_id: z.string().uuid().describe("Project UUID"),
+        projectId: z.string().uuid().describe("Project UUID"),
 
         ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
-    withGuard("elnora_list_project_members", getContext, async ({ project_id }) => {
+    withGuard("elnora_projects_members", getContext, async ({ projectId }) => {
       try {
-        const result = await getClient().get(`/projects/${project_id}/members`);
+        const result = await getClient().get(`/projects/${projectId}/members`);
         return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
@@ -163,22 +157,22 @@ export function registerProjectTools(
   );
 
   server.registerTool(
-    "elnora_add_project_member",
+    "elnora_projects_addMember",
     {
-      title: "Add Project Member",
-      description: "Add a user to a project.",
+      title: "elnora_projects_addMember",
+      description: "Add a member to a project",
       inputSchema: {
-        project_id: z.string().uuid().describe("Project UUID"),
-        user_id: z.string().min(1).max(255).describe("User ID to add"),
+        projectId: z.string().uuid().describe("Project UUID"),
+        userId: z.string().min(1).max(255).describe("User ID to add"),
         role: z.string().max(100).default("Member").describe("Role (default: Member)"),
 
         ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
-    withGuard("elnora_add_project_member", getContext, async ({ project_id, user_id, role }) => {
+    withGuard("elnora_projects_addMember", getContext, async ({ projectId, userId, role }) => {
       try {
-        const result = await getClient().post(`/projects/${project_id}/members`, { userId: user_id, role });
+        const result = await getClient().post(`/projects/${projectId}/members`, { userId, role });
         return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
@@ -187,22 +181,22 @@ export function registerProjectTools(
   );
 
   server.registerTool(
-    "elnora_update_project_member_role",
+    "elnora_projects_updateRole",
     {
-      title: "Update Project Member Role",
-      description: "Change a project member's role.",
+      title: "elnora_projects_updateRole",
+      description: "Update a project member's role",
       inputSchema: {
-        project_id: z.string().uuid().describe("Project UUID"),
-        user_id: z.string().min(1).max(255).describe("User ID"),
+        projectId: z.string().uuid().describe("Project UUID"),
+        userId: z.string().min(1).max(255).describe("User ID"),
         role: z.string().min(1).max(100).describe("New role"),
 
         ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
-    withGuard("elnora_update_project_member_role", getContext, async ({ project_id, user_id, role }) => {
+    withGuard("elnora_projects_updateRole", getContext, async ({ projectId, userId, role }) => {
       try {
-        const result = await getClient().put(`/projects/${project_id}/members/${user_id}/role`, { role });
+        const result = await getClient().put(`/projects/${projectId}/members/${userId}/role`, { role });
         return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
@@ -211,22 +205,22 @@ export function registerProjectTools(
   );
 
   server.registerTool(
-    "elnora_remove_project_member",
+    "elnora_projects_removeMember",
     {
-      title: "Remove Project Member",
-      description: "Remove a user from a project.",
+      title: "elnora_projects_removeMember",
+      description: "Remove a member from a project",
       inputSchema: {
-        project_id: z.string().uuid().describe("Project UUID"),
-        user_id: z.string().min(1).max(255).describe("User ID to remove"),
+        projectId: z.string().uuid().describe("Project UUID"),
+        userId: z.string().min(1).max(255).describe("User ID to remove"),
 
         ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
     },
-    withGuard("elnora_remove_project_member", getContext, async ({ project_id, user_id }) => {
+    withGuard("elnora_projects_removeMember", getContext, async ({ projectId, userId }) => {
       try {
-        await getClient().del(`/projects/${project_id}/members/${user_id}`);
-        return { content: [{ type: "text" as const, text: JSON.stringify({ removed: true, userId: user_id }) }] };
+        await getClient().del(`/projects/${projectId}/members/${userId}`);
+        return { content: [{ type: "text" as const, text: JSON.stringify({ removed: true, userId }) }] };
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
       }
@@ -234,21 +228,21 @@ export function registerProjectTools(
   );
 
   server.registerTool(
-    "elnora_leave_project",
+    "elnora_projects_leave",
     {
-      title: "Leave Project",
-      description: "Leave a project you are a member of.",
+      title: "elnora_projects_leave",
+      description: "Leave a project",
       inputSchema: {
-        project_id: z.string().uuid().describe("Project UUID"),
+        projectId: z.string().uuid().describe("Project UUID"),
 
         ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
     },
-    withGuard("elnora_leave_project", getContext, async ({ project_id }) => {
+    withGuard("elnora_projects_leave", getContext, async ({ projectId }) => {
       try {
-        await getClient().post(`/projects/${project_id}/leave`);
-        return { content: [{ type: "text" as const, text: JSON.stringify({ left: true, projectId: project_id }) }] };
+        await getClient().post(`/projects/${projectId}/leave`);
+        return { content: [{ type: "text" as const, text: JSON.stringify({ left: true, projectId }) }] };
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
       }

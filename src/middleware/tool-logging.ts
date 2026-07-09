@@ -62,7 +62,7 @@ function sanitizeLogValue(value: string): string {
  * for fields that might contain user data.
  */
 const REDACT_CONTENT_KEYS = new Set(["content", "message", "description", "initial_message", "query"]);
-const REDACT_PII_KEYS = new Set(["email", "first_name", "last_name", "token", "platformToken", "apiKey"]);
+const REDACT_PII_KEYS = new Set(["email", "first_name", "last_name", "token", "platformToken", "platformRefreshToken", "refresh_token", "client_secret", "apiKey"]);
 const REDACT_ARRAY_KEYS = new Set(["file_ids", "context_file_ids", "scopes"]);
 
 function sanitizeParams(params: Record<string, unknown>): Record<string, unknown> {

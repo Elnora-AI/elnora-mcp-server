@@ -23,19 +23,19 @@ jobs:
       RELEASE_TAG: ${{ github.event.release.tag_name }}
       EVENT_NAME: ${{ github.event_name }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Guard manual dispatch to main branch
         if: github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/main'
         run: |
           echo "::error::Manual deploy is only allowed from the main branch"
           exit 1
-      - uses: aws-actions/configure-aws-credentials@v4
+      - uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ env.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
       - run: npm ci
       - run: npm run build
@@ -66,13 +66,57 @@ jobs:
             docker tag "$IMAGE:$IMAGE_TAG" "$IMAGE:latest"
             docker push "$IMAGE:latest"
           fi
+      # Pin the deployment to an immutable image digest (not a moving tag) so
+      # every release is traceable and reliably rollback-able by task-def
+      # revision. Register a fresh revision per deploy, then point the service
+      # at it instead of force-redeploying a tag-pinned definition.
+      - name: Resolve image digest
+        id: digest
+        env:
+          IMAGE_TAG: ${{ steps.tag.outputs.version }}
+        run: |
+          DIGEST=$(aws ecr describe-images \
+            --repository-name elnora-mcp-server \
+            --image-ids imageTag="$IMAGE_TAG" \
+            --region "$AWS_REGION" \
+            --query 'imageDetails[0].imageDigest' --output text)
+          if [ -z "$DIGEST" ] || [ "$DIGEST" = "None" ]; then
+            echo "::error::Could not resolve image digest for tag $IMAGE_TAG"
+            exit 1
+          fi
+          echo "Resolved digest: $DIGEST"
+          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
+      - name: Register task definition pinned to digest
+        id: register
+        env:
+          IMAGE_DIGEST: ${{ steps.digest.outputs.digest }}
+        run: |
+          IMAGE_REF="$AWS_ECR_REGISTRY/elnora-mcp-server@$IMAGE_DIGEST"
+          CURRENT=$(aws ecs describe-task-definition \
+            --task-definition prod-mcp-server \
+            --region "$AWS_REGION" \
+            --query 'taskDefinition' --output json)
+          NEW_DEF=$(echo "$CURRENT" | jq \
+            --arg IMG "$IMAGE_REF" \
+            '.containerDefinitions = (.containerDefinitions
+                | map(if .name == "prod-mcp-server" then .image = $IMG else . end))
+             | del(.taskDefinitionArn, .revision, .status, .requiresAttributes,
+                   .compatibilities, .registeredAt, .registeredBy)')
+          NEW_ARN=$(aws ecs register-task-definition \
+            --region "$AWS_REGION" \
+            --cli-input-json "$NEW_DEF" \
+            --query 'taskDefinition.taskDefinitionArn' --output text)
+          echo "Registered $NEW_ARN (image $IMAGE_REF)"
+          echo "arn=$NEW_ARN" >> "$GITHUB_OUTPUT"
       - name: Update ECS service
+        env:
+          TASK_DEF_ARN: ${{ steps.register.outputs.arn }}
         run: |
           export AWS_PAGER=""
           aws ecs update-service \
             --cluster "$AWS_CLUSTER" \
             --service mcp-server \
-            --force-new-deployment \
+            --task-definition "$TASK_DEF_ARN" \
             --region "$AWS_REGION"
       - name: Wait for stabilization
         run: |

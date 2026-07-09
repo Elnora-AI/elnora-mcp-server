@@ -12,9 +12,10 @@ import { corsMiddleware } from "./middleware/cors.js";
 import { SUPPORTED_SCOPES, ALL_SCOPES } from "./constants.js";
 import { logAuthEvent } from "./middleware/tool-logging.js";
 import { RedisTokenStore } from "./auth/redis-token-store.js";
+import { RedisClientsStore } from "./auth/redis-clients-store.js";
 import { TokenStore } from "./auth/token-store.js";
+import { validateApiKey } from "./auth/validate-api-key.js";
 import rateLimit from "express-rate-limit";
-import axios from "axios";
 
 function requireEnv(name: string): string {
   const value = process.env[name];
@@ -39,31 +40,6 @@ function loadConfig(): ElnoraConfig {
   };
 }
 
-/**
- * Validate an API key against the Elnora platform.
- * Returns the platform-assigned user identifier on success, or null on failure.
- * The platform is the sole authority — no local format checks gate access.
- */
-async function validateApiKeyWithPlatform(
-  apiKey: string,
-  config: ElnoraConfig,
-): Promise<{ userId: string } | null> {
-  try {
-    const validation = await axios.post(
-      config.tokenValidationUrl,
-      { token: apiKey },
-      { timeout: 10_000, headers: { "X-Service-Key": config.mcpServiceKey } },
-    );
-    if (validation.data.valid && validation.data.user_id) {
-      return { userId: String(validation.data.user_id) };
-    }
-    return null;
-  } catch (err) {
-    logAuthEvent("api_key_validation_error", "unknown", { error: err instanceof Error ? err.message : "Unknown error" });
-    return null;
-  }
-}
-
 async function main(): Promise<void> {
   const config = loadConfig();
 
@@ -75,12 +51,20 @@ async function main(): Promise<void> {
     }
   }
 
-  // --- Redis token store (fail-closed — server won't start without Redis) ---
+  // --- Redis stores (fail-closed — server won't start without Redis) ---
   const store: TokenStore = new RedisTokenStore(config.redisUrl);
   await store.ping();
   console.error("Redis token store connected");
 
+  const clientsStore = new RedisClientsStore(config.redisUrl);
+  await clientsStore.ping();
+  console.error("Redis clients store connected");
+
   const app = express();
+
+  // Trust one proxy hop (ALB) so X-Forwarded-For is used for req.ip
+  // Required for express-rate-limit to identify clients correctly behind ALB
+  app.set("trust proxy", 1);
 
   // --- Security middleware (CoSAI MCP-T7) ---
   app.use(corsMiddleware(config));
@@ -108,7 +92,7 @@ async function main(): Promise<void> {
   });
 
   // --- OAuth 2.1 Authorization Server ---
-  const provider = new ElnoraOAuthProvider(config, store);
+  const provider = new ElnoraOAuthProvider(config, store, clientsStore);
   const issuerUrl = new URL(config.publicUrl);
   const mcpServerUrl = new URL(`${config.publicUrl}/mcp`);
 
@@ -206,18 +190,18 @@ async function main(): Promise<void> {
    * If no API key header, calls next() to proceed to OAuth middleware.
    */
   async function apiKeyAuthMiddleware(req: Request, res: Response, next: NextFunction): Promise<void> {
-    const apiKey = req.headers["x-api-key"] as string | undefined;
+    const token = req.headers["x-api-key"] as string | undefined;
 
     // codeql[js/user-controlled-bypass] Dual auth by design: both API key and OAuth paths
     // validate credentials server-side. API key is validated by the platform's token endpoint;
     // absence of API key falls through to OAuth bearer token verification in ensureAuthenticated.
-    if (!apiKey) {
+    if (!token) {
       next();
       return;
     }
 
     // Validate against the platform (CoSAI MCP-T7)
-    const result = await validateApiKeyWithPlatform(apiKey, config);
+    const result = await validateApiKey(token, config, store);
 
     if (!result) {
       logAuthEvent("api_key_rejected", "unknown");
@@ -233,9 +217,8 @@ async function main(): Promise<void> {
 
     // Set auth context compatible with OAuth flow — use SDK's typed req.auth
     // API key users get all scopes — platform enforces permissions
-    // Store isApiKeyAuth flag — never store raw API key in extra (leakable if logged)
     req.auth = {
-      token: apiKey,
+      token,
       clientId: apiKeyClientId,
       scopes: ALL_SCOPES,
       extra: { isApiKeyAuth: true },
@@ -327,10 +310,23 @@ async function main(): Promise<void> {
     console.error(`Health check: http://localhost:${config.port}/health`);
   });
 
+  // Heartbeat — emits one structured log line per minute with uptime and memory.
+  const heartbeatStartedAt = Date.now();
+  const heartbeatInterval = setInterval(() => {
+    const uptimeSec = Math.floor((Date.now() - heartbeatStartedAt) / 1000);
+    const mem = process.memoryUsage();
+    const rssMb = Math.round(mem.rss / 1024 / 1024);
+    const heapUsedMb = Math.round(mem.heapUsed / 1024 / 1024);
+    console.error(`heartbeat uptime_sec=${uptimeSec} rss_mb=${rssMb} heap_used_mb=${heapUsedMb}`);
+  }, 60_000);
+  heartbeatInterval.unref();
+
   // Graceful shutdown — let in-flight requests drain before ECS kills the process
   const gracefulShutdown = async (signal: string) => {
     console.error(`${signal} received — shutting down gracefully`);
+    clearInterval(heartbeatInterval);
     httpServer.close(async () => {
+      await clientsStore.disconnect();
       await store.disconnect();
       process.exit(0);
     });

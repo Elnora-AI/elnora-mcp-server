@@ -14,7 +14,6 @@ import { mkdirSync, writeFileSync, readdirSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 import { registerTaskTools } from "../src/tools/tasks.js";
-import { registerMessageTools } from "../src/tools/messages.js";
 import { registerFileTools } from "../src/tools/files.js";
 import { registerProtocolTools } from "../src/tools/protocols.js";
 import { registerProjectTools } from "../src/tools/projects.js";
@@ -86,7 +85,6 @@ const stubGetContext = () => ({ client: stubGetClient(), clientId: "stub", scope
 
 const REGISTRATIONS: [string, (s: any, gc: any, gx: any) => void][] = [
 	["tasks", registerTaskTools],
-	["messages", registerMessageTools],
 	["files", registerFileTools],
 	["protocols", registerProtocolTools],
 	["projects", registerProjectTools],
@@ -255,7 +253,6 @@ function renderTool(t: Captured): string {
 // ---------------------------------------------------------------------------
 const CATEGORY: Record<string, { title: string; blurb: string }> = {
 	tasks: { title: "Tasks", blurb: "Create tasks and drive the Elnora agent." },
-	messages: { title: "Messages", blurb: "Send and read messages within a task." },
 	files: { title: "Files", blurb: "Upload, manage, and organize workspace files." },
 	protocols: { title: "Protocols", blurb: "Generate and optimize bioprotocols." },
 	projects: { title: "Projects", blurb: "Create and manage projects and members." },

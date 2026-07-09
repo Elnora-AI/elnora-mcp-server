@@ -1,16 +1,25 @@
-FROM node:22-slim@sha256:9c2c405e3ff9b9afb2873232d24bb06367d649aa3e6259cbe314da59578e81e9 AS builder
+FROM node:26.3.1-trixie-slim AS builder
 WORKDIR /app
+RUN apt-get update && \
+    apt-get upgrade -y --no-install-recommends && \
+    apt-get install -y --no-install-recommends libssl3 openssl && \
+    rm -rf /var/lib/apt/lists/*
 COPY package.json package-lock.json ./
 RUN npm ci --ignore-scripts
 COPY tsconfig.json ./
 COPY src/ ./src/
 RUN npm run build
 
-FROM node:22-slim@sha256:9c2c405e3ff9b9afb2873232d24bb06367d649aa3e6259cbe314da59578e81e9
+FROM node:26.3.1-trixie-slim
 WORKDIR /app
 ENV NODE_ENV=production
+RUN apt-get update && \
+    apt-get upgrade -y --no-install-recommends && \
+    apt-get install -y --no-install-recommends libssl3 openssl && \
+    rm -rf /var/lib/apt/lists/*
 COPY --from=builder /app/package.json /app/package-lock.json ./
-RUN npm ci --omit=dev --ignore-scripts
+RUN npm ci --omit=dev --ignore-scripts && \
+    rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 COPY --from=builder /app/dist ./dist
 
 EXPOSE 3000
