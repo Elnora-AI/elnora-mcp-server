@@ -71,7 +71,7 @@ export function registerTaskTools(
       title: "elnora_tasks_create",
       description: "Create a new task in a project",
       inputSchema: {
-        project: z.string().uuid().describe("Project UUID"),
+        project: z.string().uuid().optional().describe("Project UUID (optional; defaults to your workspace)"),
         title: z.string().max(200).optional().describe("Task title"),
         message: z.string().max(50_000).optional().describe("Initial message"),
         wait: z.boolean().optional().describe("CLI-only: wait for agent response (no-op over MCP)"),
@@ -86,7 +86,8 @@ export function registerTaskTools(
         const client = getClient();
         // Note: backend /tasks does not accept initialMessage in the create body.
         // The message is sent separately via sendMessage below to avoid duplication.
-        const body: Record<string, unknown> = { projectId: project, title: title || "New Task" };
+        // project is optional: omitted → backend creates the task in the caller's default workspace.
+        const body: Record<string, unknown> = { title: title || "New Task", ...(project ? { projectId: project } : {}) };
         const task = await client.post<{ id: string }>("/tasks", body);
 
         // Two-step: create then send initial message if provided.
