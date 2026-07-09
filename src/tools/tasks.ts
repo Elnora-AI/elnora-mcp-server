@@ -69,7 +69,8 @@ export function registerTaskTools(
     "elnora_tasks_create",
     {
       title: "elnora_tasks_create",
-      description: "Create a new task in a project",
+      description:
+        "Create a new task in a project. If a message is provided it is queued, but the AI response is NOT returned — the agent processes asynchronously. Poll elnora_tasks_messages every 5-10s until the last message has role 'assistant' with metadata.status 'completed'. Timeout after 5 min.",
       inputSchema: {
         project: z.string().uuid().optional().describe("Project UUID (optional; defaults to your workspace)"),
         title: z.string().max(200).optional().describe("Task title"),
@@ -117,7 +118,8 @@ export function registerTaskTools(
     "elnora_tasks_send",
     {
       title: "elnora_tasks_send",
-      description: "Send a message to a task",
+      description:
+        "Send a message to a task. Returns the created user message immediately — the agent processes asynchronously. To get the AI response, poll elnora_tasks_messages until the last message has role 'assistant' with metadata.status 'completed'. Poll every 5-10s, timeout after 5 min.",
       inputSchema: {
         taskId: z.string().uuid().describe("Task UUID"),
         message: z.string().min(1).max(50_000).describe("Message content (markdown supported)"),
