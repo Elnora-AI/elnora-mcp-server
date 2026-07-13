@@ -72,6 +72,10 @@ export const TOOL_SCOPES: Record<string, string[]> = {
   elnora_orgs_listAll: ["orgs:read"],
 
   // Folders
+  elnora_folders_roots: ["folders:read"],
+  elnora_folders_children: ["folders:read"],
+  elnora_folders_get: ["folders:read"],
+  elnora_folders_files: ["folders:read"],
   elnora_folders_list: ["folders:read"],
   elnora_folders_create: ["folders:write"],
   elnora_folders_rename: ["folders:write"],

@@ -12,6 +12,94 @@ export function registerFolderTools(
   getContext: () => RequestContext,
 ): void {
   server.registerTool(
+    "elnora_folders_roots",
+    {
+      title: "elnora_folders_roots",
+      description: "List the top-level Knowledge Base folders you can access",
+      inputSchema: {
+        ...OUTPUT_OPTIONS_SCHEMA,
+      },
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+    },
+    withGuard("elnora_folders_roots", getContext, async () => {
+      try {
+        const result = await getClient().get("/folders/roots");
+        return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
+      } catch (error) {
+        return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
+      }
+    }),
+  );
+
+  server.registerTool(
+    "elnora_folders_children",
+    {
+      title: "elnora_folders_children",
+      description: "List the child folders of a Knowledge Base folder",
+      inputSchema: {
+        folderId: z.string().uuid().describe("Folder UUID"),
+
+        ...OUTPUT_OPTIONS_SCHEMA,
+      },
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+    },
+    withGuard("elnora_folders_children", getContext, async ({ folderId }) => {
+      try {
+        const result = await getClient().get(`/folders/${folderId}/children`);
+        return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
+      } catch (error) {
+        return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
+      }
+    }),
+  );
+
+  server.registerTool(
+    "elnora_folders_get",
+    {
+      title: "elnora_folders_get",
+      description: "Get a Knowledge Base folder's details and breadcrumb path",
+      inputSchema: {
+        folderId: z.string().uuid().describe("Folder UUID"),
+
+        ...OUTPUT_OPTIONS_SCHEMA,
+      },
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+    },
+    withGuard("elnora_folders_get", getContext, async ({ folderId }) => {
+      try {
+        const result = await getClient().get(`/folders/${folderId}`);
+        return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
+      } catch (error) {
+        return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
+      }
+    }),
+  );
+
+  server.registerTool(
+    "elnora_folders_files",
+    {
+      title: "elnora_folders_files",
+      description: "List files placed directly in a Knowledge Base folder",
+      inputSchema: {
+        folderId: z.string().uuid().describe("Folder UUID"),
+        page: z.number().int().min(1).default(1).describe("Page number"),
+        pageSize: z.number().int().min(1).max(100).default(25).describe("Results per page"),
+
+        ...OUTPUT_OPTIONS_SCHEMA,
+      },
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+    },
+    withGuard("elnora_folders_files", getContext, async ({ folderId, page, pageSize }) => {
+      try {
+        const result = await getClient().get(`/folders/${folderId}/files`, { page, pageSize });
+        return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
+      } catch (error) {
+        return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
+      }
+    }),
+  );
+
+  server.registerTool(
     "elnora_folders_list",
     {
       title: "elnora_folders_list",
