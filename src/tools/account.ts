@@ -122,7 +122,7 @@ export function registerAccountTools(
         if (!yes) {
           return { content: [{ type: "text" as const, text: "Error: Account deletion requires yes=true to confirm." }], isError: true };
         }
-        await getClient().del("/account");
+        await getClient().del("/account/me");
         return { content: [{ type: "text" as const, text: JSON.stringify({ deleted: true }) }] };
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
@@ -148,7 +148,7 @@ export function registerAccountTools(
         const query: Record<string, string> = {};
         if (state) query.state = state;
         if (refCode) query.refCode = refCode;
-        const result = await getClient().get("/account/users", Object.keys(query).length > 0 ? query : undefined);
+        const result = await getClient().get("/account/user/list", Object.keys(query).length > 0 ? query : undefined);
         return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
@@ -175,7 +175,7 @@ export function registerAccountTools(
       try {
         const body: Record<string, string> = { documentType, version, content };
         if (effectiveDate) body.effectiveDate = effectiveDate;
-        const result = await getClient().post("/legal-docs/versions", body);
+        const result = await getClient().post("/userAgreement/legalDocumentVersion", body);
         return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
@@ -205,7 +205,7 @@ export function registerAccountTools(
         if (Object.keys(body).length === 0) {
           return { content: [{ type: "text" as const, text: "Error: At least one of content or effectiveDate is required." }], isError: true };
         }
-        const result = await getClient().patch(`/legal-docs/versions/${versionId}`, body);
+        const result = await getClient().put(`/userAgreement/legalDocumentVersion/${versionId}`, body);
         return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
@@ -231,7 +231,7 @@ export function registerAccountTools(
         if (!yes) {
           return { content: [{ type: "text" as const, text: "Error: Legal doc deletion requires yes=true to confirm." }], isError: true };
         }
-        await getClient().del(`/legal-docs/versions/${versionId}`);
+        await getClient().del(`/userAgreement/legalDocumentVersion/${versionId}`);
         return { content: [{ type: "text" as const, text: JSON.stringify({ deleted: true, versionId }) }] };
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };

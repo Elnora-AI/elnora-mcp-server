@@ -260,7 +260,7 @@ export function registerOrgTools(
     },
     withGuard("elnora_orgs_setDefault", getContext, async ({ orgId }) => {
       try {
-        const result = await getClient().put(`/organizations/${orgId}/default`);
+        const result = await getClient().put(`/organizations/${orgId}/set-default`);
         return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
@@ -440,7 +440,7 @@ export function registerOrgTools(
     },
     withGuard("elnora_orgs_listAll", getContext, async () => {
       try {
-        const result = await getClient().get("/admin/organizations");
+        const result = await getClient().get("/organizations/all");
         return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };

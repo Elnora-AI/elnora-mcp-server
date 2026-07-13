@@ -5,6 +5,28 @@ All notable changes to the Elnora MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.3.1](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v1.3.0...mcp-server-v1.3.1) (2026-07-09)
+
+
+### Bug Fixes
+
+* correct wrong API routes and verb in account/orgs tools ([#259](https://github.com/Elnora-AI/elnora-mcp-server/issues/259)) ([2f53cea](https://github.com/Elnora-AI/elnora-mcp-server/commit/2f53cea940e9ca44da20506fa64cd37719cc0139))
+* **docs:** exclude staff-only tools from the public MCP catalog ([#260](https://github.com/Elnora-AI/elnora-mcp-server/issues/260)) ([1f45a0d](https://github.com/Elnora-AI/elnora-mcp-server/commit/1f45a0db903d1cf3b16868d01778eb7962477ade))
+
+## [1.3.0](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v1.2.0...mcp-server-v1.3.0) (2026-07-09)
+
+
+### Features
+
+* MCP catalog generator for docs.elnora.ai ([#251](https://github.com/Elnora-AI/elnora-mcp-server/issues/251)) ([720987d](https://github.com/Elnora-AI/elnora-mcp-server/commit/720987d23c7a2caeac79e1efe1374c3a22138f28))
+
+## [1.2.0](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v1.1.8...mcp-server-v1.2.0) (2026-07-09)
+
+
+### Features
+
+* make project optional on task/file create, list, upload, fork tools ([#256](https://github.com/Elnora-AI/elnora-mcp-server/issues/256)) ([9be581c](https://github.com/Elnora-AI/elnora-mcp-server/commit/9be581cd13beddeedfe2ebacb4c8ee16e12721b4))
+
 ## [1.1.8](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v1.1.7...mcp-server-v1.1.8) (2026-06-21)
 
 

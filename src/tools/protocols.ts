@@ -20,7 +20,8 @@ export function registerProtocolTools(
     "elnora_protocols_generate",
     {
       title: "elnora_protocols_generate",
-      description: "Generate a bioprotocol — creates a task and sends the description in one call",
+      description:
+        "Generate a bioprotocol — creates a task and sends the description in one call. Returns the task and the queued user message, NOT the AI response; the agent processes asynchronously. To get the generated protocol, poll elnora_tasks_messages with the returned task id every 5-10s until the last message has role 'assistant' with metadata.status 'completed'. Timeout after 5 min.",
       inputSchema: {
         description: z.string().min(10).max(5000).describe("Protocol description"),
         title: z.string().max(200).optional().describe("Task title (defaults to first 100 chars of description)"),
