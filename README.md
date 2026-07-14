@@ -114,6 +114,10 @@ Create an API key in your [Elnora dashboard](https://platform.elnora.ai) and pas
 }
 ```
 
+If your client only exposes a single bearer/token field, you can instead pass
+the same key as `Authorization: Bearer YOUR_API_KEY` — the server accepts an
+Elnora API key on either header.
+
 **Security best practices:**
 - Never commit API keys to version control
 - Use environment variables or a secrets manager
