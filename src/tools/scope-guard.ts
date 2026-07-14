@@ -37,6 +37,10 @@ export const TOOL_SCOPES: Record<string, string[]> = {
   elnora_files_workingCopy: ["files:write"],
   elnora_files_commit: ["files:write"],
   elnora_files_searchContent: ["search:read"],
+  elnora_files_move: ["files:write"],
+  elnora_files_share: ["files:write"],
+  elnora_files_unshare: ["files:write"],
+  elnora_files_shares: ["files:read"],
 
   // Projects
   elnora_projects_list: ["projects:read"],
@@ -70,6 +74,7 @@ export const TOOL_SCOPES: Record<string, string[]> = {
   elnora_orgs_acceptInvite: ["orgs:write"],
   elnora_orgs_files: ["files:read"],
   elnora_orgs_listAll: ["orgs:read"],
+  elnora_orgs_directory: ["orgs:read"],
 
   // Folders
   elnora_folders_roots: ["folders:read"],
@@ -81,6 +86,9 @@ export const TOOL_SCOPES: Record<string, string[]> = {
   elnora_folders_rename: ["folders:write"],
   elnora_folders_move: ["folders:write"],
   elnora_folders_delete: ["folders:write"],
+  elnora_folders_share: ["folders:write"],
+  elnora_folders_unshare: ["folders:write"],
+  elnora_folders_shares: ["folders:read"],
 
   // Search
   elnora_search_tasks: ["search:read"],

@@ -447,4 +447,27 @@ export function registerOrgTools(
       }
     }),
   );
+
+  server.registerTool(
+    "elnora_orgs_directory",
+    {
+      title: "elnora_orgs_directory",
+      description: "Search organization members by name or email (Share-modal typeahead)",
+      inputSchema: {
+        orgId: z.string().uuid().describe("Organization ID"),
+        query: z.string().min(2).describe("Name or email substring to match (minimum 2 characters)"),
+
+        ...OUTPUT_OPTIONS_SCHEMA,
+      },
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+    },
+    withGuard("elnora_orgs_directory", getContext, async ({ orgId, query }) => {
+      try {
+        const result = await getClient().get(`/organizations/${orgId}/members/directory`, { q: query });
+        return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
+      } catch (error) {
+        return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
+      }
+    }),
+  );
 }
