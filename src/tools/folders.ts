@@ -125,19 +125,24 @@ export function registerFolderTools(
     "elnora_folders_create",
     {
       title: "elnora_folders_create",
-      description: "Create a new folder in a project",
+      description: "Create a Knowledge Base folder (or a legacy project folder when project is set)",
       inputSchema: {
-        projectId: z.string().uuid().describe("Project UUID"),
         name: z.string().min(1).max(255).describe("Folder name"),
         parentId: z.string().uuid().optional().describe("Parent folder UUID for nesting"),
+        project: z.string().uuid().optional().describe("Legacy: create a project-scoped folder instead of a Knowledge Base folder"),
 
         ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
-    withGuard("elnora_folders_create", getContext, async ({ projectId, name, parentId }) => {
+    withGuard("elnora_folders_create", getContext, async ({ name, parentId, project }) => {
       try {
-        const result = await getClient().post(`/projects/${projectId}/folders`, { name, parentId });
+        // Both the KB and legacy create bodies use `parentFolderId`.
+        const body: Record<string, unknown> = { name };
+        if (parentId) body.parentFolderId = parentId;
+        const result = project
+          ? await getClient().post(`/projects/${project}/folders`, body)
+          : await getClient().post(`/folders`, body);
         return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
@@ -153,14 +158,18 @@ export function registerFolderTools(
       inputSchema: {
         folderId: z.string().uuid().describe("Folder UUID"),
         name: z.string().min(1).max(255).describe("New name"),
+        legacy: z.boolean().default(false).describe("Rename a legacy project folder instead of a Knowledge Base folder"),
 
         ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
-    withGuard("elnora_folders_rename", getContext, async ({ folderId, name }) => {
+    withGuard("elnora_folders_rename", getContext, async ({ folderId, name, legacy }) => {
       try {
-        const result = await getClient().put(`/folders/${folderId}`, { name });
+        // KB folders use PATCH /folders/{id}; the deprecated project-folder controller uses PUT.
+        const result = legacy
+          ? await getClient().put(`/folders/${folderId}`, { name })
+          : await getClient().patch(`/folders/${folderId}`, { name });
         return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
@@ -176,14 +185,24 @@ export function registerFolderTools(
       inputSchema: {
         folderId: z.string().uuid().describe("Folder UUID"),
         parentId: z.string().uuid().optional().describe("New parent folder UUID (omit for root)"),
+        legacy: z.boolean().default(false).describe("Move a legacy project folder instead of a Knowledge Base folder"),
 
         ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
-    withGuard("elnora_folders_move", getContext, async ({ folderId, parentId }) => {
+    withGuard("elnora_folders_move", getContext, async ({ folderId, parentId, legacy }) => {
       try {
-        const result = await getClient().put(`/folders/${folderId}/move`, { parentId: parentId ?? null });
+        let result;
+        if (legacy) {
+          // Deprecated project-folder controller: PUT /folders/{id}/move with MoveFolderDTO.
+          result = await getClient().put(`/folders/${folderId}/move`, { newParentFolderId: parentId ?? null });
+        } else if (parentId) {
+          result = await getClient().patch(`/folders/${folderId}/move`, { parentFolderId: parentId });
+        } else {
+          // The KB move endpoint can't clear a parent — move-to-root goes through PATCH /folders/{id}.
+          result = await getClient().patch(`/folders/${folderId}`, { moveToRoot: true });
+        }
         return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
@@ -195,18 +214,24 @@ export function registerFolderTools(
     "elnora_folders_delete",
     {
       title: "elnora_folders_delete",
-      description: "Delete a folder",
+      description: "Delete a folder (Knowledge Base folders are archived)",
       inputSchema: {
         folderId: z.string().uuid().describe("Folder UUID"),
+        legacy: z.boolean().default(false).describe("Hard-delete a legacy project folder instead of archiving a Knowledge Base folder"),
 
         ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
     },
-    withGuard("elnora_folders_delete", getContext, async ({ folderId }) => {
+    withGuard("elnora_folders_delete", getContext, async ({ folderId, legacy }) => {
       try {
-        await getClient().del(`/folders/${folderId}`);
-        return { content: [{ type: "text" as const, text: JSON.stringify({ deleted: true, folderId }) }] };
+        if (legacy) {
+          await getClient().del(`/folders/${folderId}`);
+          return { content: [{ type: "text" as const, text: JSON.stringify({ deleted: true, folderId }) }] };
+        }
+        // KB folders are removed by archiving, not hard-deleted.
+        await getClient().post(`/folders/${folderId}/archive`, {});
+        return { content: [{ type: "text" as const, text: JSON.stringify({ archived: true, folderId }) }] };
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
       }
