@@ -1,0 +1,15 @@
+# gitleaks config for elnora-mcp-server.
+# Extend the built-in ruleset, then allow-list the one place that legitimately
+# contains token-shaped strings: the unit tests. They hardcode obviously-fake
+# API keys (e.g. elnora_live_abc123xyz, elnora_live_test123) to exercise the
+# X-API-Key auth path. These are not real credentials — the server's real
+# secrets (OAuth client secret, service key) are injected at runtime from a
+# gitignored .env and never committed.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Unit-test fixtures hardcode fake elnora_live_ API keys, not real credentials."
+paths = [
+  '''tests/.*\.test\.ts''',
+]
