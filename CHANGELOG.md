@@ -5,6 +5,13 @@ All notable changes to the Elnora MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.5.0](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v1.4.0...mcp-server-v1.5.0) (2026-07-14)
+
+
+### Features
+
+* **sharing:** file & folder sharing, file move, and member directory tools ([#269](https://github.com/Elnora-AI/elnora-mcp-server/issues/269)) ([cbc3e2d](https://github.com/Elnora-AI/elnora-mcp-server/commit/cbc3e2dbf294c0084560a28ec61fdd1da5814b68))
+
 ## [1.4.0](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v1.3.1...mcp-server-v1.4.0) (2026-07-13)
 
 
