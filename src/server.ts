@@ -7,6 +7,7 @@ import { registerProtocolTools } from "./tools/protocols.js";
 import { registerProjectTools } from "./tools/projects.js";
 import { registerOrgTools } from "./tools/orgs.js";
 import { registerFolderTools } from "./tools/folders.js";
+import { registerReviewTools } from "./tools/review.js";
 import { registerLibraryTools } from "./tools/library.js";
 import { registerSearchTools } from "./tools/search.js";
 import { registerApiKeyTools } from "./tools/api-keys.js";
@@ -45,6 +46,7 @@ export function createElnoraServer(
   registerProjectTools(server, getClient, getContext);
   registerOrgTools(server, getClient, getContext);
   registerFolderTools(server, getClient, getContext);
+  registerReviewTools(server, getClient, getContext);
   registerLibraryTools(server, getClient, getContext);
 
   // Search & discovery

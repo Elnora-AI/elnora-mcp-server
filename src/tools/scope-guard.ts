@@ -16,6 +16,9 @@ export const TOOL_SCOPES: Record<string, string[]> = {
   elnora_tasks_messages: ["messages:read"],
   elnora_tasks_update: ["tasks:write"],
   elnora_tasks_archive: ["tasks:write"],
+  elnora_tasks_unarchive: ["tasks:write"],
+  elnora_tasks_attachments: ["tasks:read"],
+  elnora_tasks_attachmentContent: ["tasks:read"],
 
   // Files
   elnora_files_list: ["files:read"],
@@ -75,6 +78,7 @@ export const TOOL_SCOPES: Record<string, string[]> = {
   elnora_orgs_files: ["files:read"],
   elnora_orgs_listAll: ["orgs:read"],
   elnora_orgs_directory: ["orgs:read"],
+  elnora_orgs_setAutotidy: ["orgs:write"],
 
   // Folders
   elnora_folders_roots: ["folders:read"],
@@ -89,6 +93,11 @@ export const TOOL_SCOPES: Record<string, string[]> = {
   elnora_folders_share: ["folders:write"],
   elnora_folders_unshare: ["folders:write"],
   elnora_folders_shares: ["folders:read"],
+
+  // KB review queue
+  elnora_review_list: ["review:read"],
+  elnora_review_approve: ["review:write"],
+  elnora_review_reject: ["review:write"],
 
   // Search
   elnora_search_tasks: ["search:read"],

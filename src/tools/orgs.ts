@@ -470,4 +470,27 @@ export function registerOrgTools(
       }
     }),
   );
+
+  server.registerTool(
+    "elnora_orgs_setAutotidy",
+    {
+      title: "elnora_orgs_setAutotidy",
+      description: "Enable or disable Knowledge Base auto-tidy for an organization",
+      inputSchema: {
+        orgId: z.string().uuid().describe("Organization UUID"),
+        enabled: z.boolean().default(false).describe("Enable Knowledge Base auto-tidy (omit to disable)"),
+
+        ...OUTPUT_OPTIONS_SCHEMA,
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+    },
+    withGuard("elnora_orgs_setAutotidy", getContext, async ({ orgId, enabled }) => {
+      try {
+        const result = await getClient().patch(`/organizations/${orgId}/kb-autotidy`, { enabled });
+        return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
+      } catch (error) {
+        return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
+      }
+    }),
+  );
 }
