@@ -212,4 +212,87 @@ export function registerFolderTools(
       }
     }),
   );
+
+  server.registerTool(
+    "elnora_folders_share",
+    {
+      title: "elnora_folders_share",
+      description: "Share a folder with a user or the whole organization (default role: editor)",
+      inputSchema: {
+        folderId: z.string().uuid().describe("Folder ID to share"),
+        userId: z.number().int().positive().optional().describe("User ID to share with (omit when using orgWide)"),
+        orgWide: z.boolean().default(false).describe("Share with everyone in the organization"),
+        role: z.enum(["viewer", "editor", "admin"]).default("editor").describe("Access role to grant"),
+
+        ...OUTPUT_OPTIONS_SCHEMA,
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    },
+    withGuard("elnora_folders_share", getContext, async ({ folderId, userId, orgWide, role }) => {
+      try {
+        // Exactly one principal: a specific user OR the whole org (teams are not available yet).
+        if (orgWide === (userId !== undefined)) {
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: JSON.stringify({ error: "Specify exactly one recipient: either userId or orgWide." }),
+              },
+            ],
+            isError: true,
+          };
+        }
+        const body = orgWide ? { isOrgWide: true, role } : { userId, role };
+        const result = await getClient().post(`/folders/${folderId}/share`, body);
+        return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
+      } catch (error) {
+        return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
+      }
+    }),
+  );
+
+  server.registerTool(
+    "elnora_folders_unshare",
+    {
+      title: "elnora_folders_unshare",
+      description: "Revoke a folder share by its ACE id",
+      inputSchema: {
+        folderId: z.string().uuid().describe("Folder ID"),
+        aceId: z.string().uuid().describe("Share (ACE) ID to revoke"),
+
+        ...OUTPUT_OPTIONS_SCHEMA,
+      },
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
+    },
+    withGuard("elnora_folders_unshare", getContext, async ({ folderId, aceId }) => {
+      try {
+        await getClient().del(`/folders/${folderId}/share/${aceId}`);
+        return { content: [{ type: "text" as const, text: JSON.stringify({ revoked: true, folderId, aceId }) }] };
+      } catch (error) {
+        return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
+      }
+    }),
+  );
+
+  server.registerTool(
+    "elnora_folders_shares",
+    {
+      title: "elnora_folders_shares",
+      description: "List the current shares on a folder",
+      inputSchema: {
+        folderId: z.string().uuid().describe("Folder ID"),
+
+        ...OUTPUT_OPTIONS_SCHEMA,
+      },
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+    },
+    withGuard("elnora_folders_shares", getContext, async ({ folderId }) => {
+      try {
+        const result = await getClient().get(`/folders/${folderId}/shares`);
+        return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
+      } catch (error) {
+        return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
+      }
+    }),
+  );
 }
