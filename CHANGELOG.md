@@ -5,6 +5,13 @@ All notable changes to the Elnora MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.6.1](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v1.6.0...mcp-server-v1.6.1) (2026-07-14)
+
+
+### Bug Fixes
+
+* **auth:** accept an Elnora API key sent as an Authorization: Bearer token ([#275](https://github.com/Elnora-AI/elnora-mcp-server/issues/275)) ([694003c](https://github.com/Elnora-AI/elnora-mcp-server/commit/694003c43a7650c032296512b728a67e1cc37034))
+
 ## [1.6.0](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v1.5.0...mcp-server-v1.6.0) (2026-07-14)
 
 
