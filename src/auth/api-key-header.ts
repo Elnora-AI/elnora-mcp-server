@@ -33,11 +33,13 @@ export function resolveApiKeyFromHeaders(
   const fromHeader = firstHeaderValue(xApiKey);
   if (fromHeader) return fromHeader;
 
+  // Plain string parsing (no regex) so a crafted Authorization header can't
+  // cause backtracking / ReDoS.
   const authz = firstHeaderValue(authorization);
   if (typeof authz === "string") {
-    const match = /^Bearer\s+(.+)$/i.exec(authz);
-    if (match) {
-      const bearer = match[1].trim();
+    const trimmed = authz.trimStart();
+    if (trimmed.slice(0, 7).toLowerCase() === "bearer ") {
+      const bearer = trimmed.slice(7).trim();
       if (bearer.startsWith(API_KEY_TOKEN_PREFIX)) return bearer;
     }
   }
