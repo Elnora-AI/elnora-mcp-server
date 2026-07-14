@@ -483,4 +483,110 @@ export function registerFileTools(
       }
     }),
   );
+
+  server.registerTool(
+    "elnora_files_move",
+    {
+      title: "elnora_files_move",
+      description: "Move a file to a different Knowledge Base folder",
+      inputSchema: {
+        fileId: z.string().uuid().describe("File ID to move"),
+        parentFolderId: z.string().uuid().describe("Destination Knowledge Base folder ID"),
+
+        ...OUTPUT_OPTIONS_SCHEMA,
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+    },
+    withGuard("elnora_files_move", getContext, async ({ fileId, parentFolderId }) => {
+      try {
+        const result = await getClient().patch(`/files/${fileId}/move`, { parentFolderId });
+        return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
+      } catch (error) {
+        return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
+      }
+    }),
+  );
+
+  server.registerTool(
+    "elnora_files_share",
+    {
+      title: "elnora_files_share",
+      description: "Share a file with a user or the whole organization (default role: editor)",
+      inputSchema: {
+        fileId: z.string().uuid().describe("File ID to share"),
+        userId: z.number().int().positive().optional().describe("User ID to share with (omit when using orgWide)"),
+        orgWide: z.boolean().default(false).describe("Share with everyone in the organization"),
+        role: z.enum(["viewer", "editor", "admin"]).default("editor").describe("Access role to grant"),
+
+        ...OUTPUT_OPTIONS_SCHEMA,
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    },
+    withGuard("elnora_files_share", getContext, async ({ fileId, userId, orgWide, role }) => {
+      try {
+        // Exactly one principal: a specific user OR the whole org (teams are not available yet).
+        if (orgWide === (userId !== undefined)) {
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: JSON.stringify({ error: "Specify exactly one recipient: either userId or orgWide." }),
+              },
+            ],
+            isError: true,
+          };
+        }
+        const body = orgWide ? { isOrgWide: true, role } : { userId, role };
+        const result = await getClient().post(`/files/${fileId}/share`, body);
+        return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
+      } catch (error) {
+        return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
+      }
+    }),
+  );
+
+  server.registerTool(
+    "elnora_files_unshare",
+    {
+      title: "elnora_files_unshare",
+      description: "Revoke a file share by its ACE id",
+      inputSchema: {
+        fileId: z.string().uuid().describe("File ID"),
+        aceId: z.string().uuid().describe("Share (ACE) ID to revoke"),
+
+        ...OUTPUT_OPTIONS_SCHEMA,
+      },
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
+    },
+    withGuard("elnora_files_unshare", getContext, async ({ fileId, aceId }) => {
+      try {
+        await getClient().del(`/files/${fileId}/share/${aceId}`);
+        return { content: [{ type: "text" as const, text: JSON.stringify({ revoked: true, fileId, aceId }) }] };
+      } catch (error) {
+        return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
+      }
+    }),
+  );
+
+  server.registerTool(
+    "elnora_files_shares",
+    {
+      title: "elnora_files_shares",
+      description: "List the current shares on a file",
+      inputSchema: {
+        fileId: z.string().uuid().describe("File ID"),
+
+        ...OUTPUT_OPTIONS_SCHEMA,
+      },
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+    },
+    withGuard("elnora_files_shares", getContext, async ({ fileId }) => {
+      try {
+        const result = await getClient().get(`/files/${fileId}/shares`);
+        return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
+      } catch (error) {
+        return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
+      }
+    }),
+  );
 }
