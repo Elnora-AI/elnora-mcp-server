@@ -12,6 +12,10 @@ Elnora is an AI-powered platform that helps researchers generate, optimize, and 
 
 Add the Elnora MCP server to your AI client. No installation required — just point to the remote URL.
 
+> **Setting this up from inside a coding agent?** See
+> [INSTALL_FOR_AGENTS.md](INSTALL_FOR_AGENTS.md) for a step-by-step,
+> self-verifying runbook (client config, auth, and a smoke test).
+
 ### Claude Code
 
 ```bash
