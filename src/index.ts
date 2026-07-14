@@ -14,6 +14,7 @@ import { logAuthEvent } from "./middleware/tool-logging.js";
 import { RedisTokenStore } from "./auth/redis-token-store.js";
 import { RedisClientsStore } from "./auth/redis-clients-store.js";
 import { TokenStore } from "./auth/token-store.js";
+import { resolveApiKeyFromHeaders } from "./auth/api-key-header.js";
 import { validateApiKey } from "./auth/validate-api-key.js";
 import rateLimit from "express-rate-limit";
 
@@ -185,16 +186,18 @@ async function main(): Promise<void> {
 
   /**
    * Middleware 1: API key authentication (runs first).
-   * If X-API-Key header is present, validates against the platform.
-   * If valid, sets auth context and calls next(). If invalid, returns 401.
-   * If no API key header, calls next() to proceed to OAuth middleware.
+   * Accepts an Elnora API key from either `X-API-Key` or an
+   * `Authorization: Bearer elnora_live_...` header (see resolveApiKeyFromHeaders).
+   * If a key is present it is validated against the platform: valid → sets auth
+   * context and calls next(); invalid → 401. A bearer value that is NOT an API
+   * key (a real OAuth token) yields no key here and falls through to OAuth.
    */
   async function apiKeyAuthMiddleware(req: Request, res: Response, next: NextFunction): Promise<void> {
-    const token = req.headers["x-api-key"] as string | undefined;
+    const token = resolveApiKeyFromHeaders(req.headers["x-api-key"], req.headers["authorization"]);
 
     // codeql[js/user-controlled-bypass] Dual auth by design: both API key and OAuth paths
     // validate credentials server-side. API key is validated by the platform's token endpoint;
-    // absence of API key falls through to OAuth bearer token verification in ensureAuthenticated.
+    // absence of an API key falls through to OAuth bearer token verification in ensureAuthenticated.
     if (!token) {
       next();
       return;
