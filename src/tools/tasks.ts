@@ -22,9 +22,10 @@ export function registerTaskTools(
     "elnora_tasks_list",
     {
       title: "elnora_tasks_list",
-      description: "List tasks, optionally filtered by project",
+      description: "List tasks, optionally filtered by project or lifecycle status",
       inputSchema: {
         project: z.string().uuid().optional().describe("Filter by project UUID"),
+        status: z.enum(["active", "archived", "all"]).optional().describe("Lifecycle filter: active (default), archived, or all"),
         page: z.number().int().min(1).default(1).describe("Page number"),
         pageSize: z.number().int().min(1).max(100).default(25).describe("Results per page"),
 
@@ -32,10 +33,10 @@ export function registerTaskTools(
       },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
-    withGuard("elnora_tasks_list", getContext, async ({ project, page, pageSize }) => {
+    withGuard("elnora_tasks_list", getContext, async ({ project, status, page, pageSize }) => {
       try {
         const path = project ? `/projects/${project}/tasks` : "/tasks";
-        const result = await getClient().get(path, { page, pageSize });
+        const result = await getClient().get(path, { page, pageSize, status });
         return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
@@ -213,6 +214,73 @@ export function registerTaskTools(
       try {
         await getClient().del(`/tasks/${taskId}`);
         return { content: [{ type: "text" as const, text: JSON.stringify({ archived: true, taskId }) }] };
+      } catch (error) {
+        return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
+      }
+    }),
+  );
+
+  server.registerTool(
+    "elnora_tasks_unarchive",
+    {
+      title: "elnora_tasks_unarchive",
+      description: "Unarchive a task so it reappears in the default task list",
+      inputSchema: {
+        taskId: z.string().uuid().describe("Task UUID to unarchive"),
+
+        ...OUTPUT_OPTIONS_SCHEMA,
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+    },
+    withGuard("elnora_tasks_unarchive", getContext, async ({ taskId }) => {
+      try {
+        await getClient().post(`/tasks/${taskId}/unarchive`, {});
+        return { content: [{ type: "text" as const, text: JSON.stringify({ unarchived: true, taskId }) }] };
+      } catch (error) {
+        return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
+      }
+    }),
+  );
+
+  server.registerTool(
+    "elnora_tasks_attachments",
+    {
+      title: "elnora_tasks_attachments",
+      description: "List the files attached to a task",
+      inputSchema: {
+        taskId: z.string().uuid().describe("Task UUID"),
+
+        ...OUTPUT_OPTIONS_SCHEMA,
+      },
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+    },
+    withGuard("elnora_tasks_attachments", getContext, async ({ taskId }) => {
+      try {
+        const result = await getClient().get(`/tasks/${taskId}/attachments`);
+        return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
+      } catch (error) {
+        return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
+      }
+    }),
+  );
+
+  server.registerTool(
+    "elnora_tasks_attachmentContent",
+    {
+      title: "elnora_tasks_attachmentContent",
+      description: "Get the content of a task attachment",
+      inputSchema: {
+        taskId: z.string().uuid().describe("Task UUID"),
+        attachmentId: z.string().uuid().describe("Attachment UUID"),
+
+        ...OUTPUT_OPTIONS_SCHEMA,
+      },
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+    },
+    withGuard("elnora_tasks_attachmentContent", getContext, async ({ taskId, attachmentId }) => {
+      try {
+        const result = await getClient().get(`/tasks/${taskId}/attachments/${attachmentId}/content`);
+        return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
       }

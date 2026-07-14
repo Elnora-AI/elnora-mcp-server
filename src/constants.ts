@@ -23,6 +23,8 @@ export const SUPPORTED_SCOPES = [
   "orgs:write",
   "folders:read",
   "folders:write",
+  "review:read",
+  "review:write",
   "library:read",
   "library:write",
   "api-keys:read",
