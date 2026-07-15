@@ -52,7 +52,13 @@ export function formatToolResult(
     data = stripEmpty(data);
   }
 
-  return JSON.stringify(data);
+  // stripEmpty collapses an empty array/object to `undefined`, and
+  // JSON.stringify(undefined) is `undefined` (not a string) — which would break
+  // the string contract and make a tool emit `text: undefined` (invalid MCP
+  // content). Fall back to the original JSON (e.g. "[]") when compaction stripped
+  // everything away.
+  const formatted = JSON.stringify(data);
+  return formatted ?? jsonString;
 }
 
 /**
