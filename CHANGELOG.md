@@ -5,6 +5,13 @@ All notable changes to the Elnora MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.6.2](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v1.6.1...mcp-server-v1.6.2) (2026-07-15)
+
+
+### Bug Fixes
+
+* **formatter:** empty compact result becomes undefined instead of valid JSON ([#278](https://github.com/Elnora-AI/elnora-mcp-server/issues/278)) ([ce3c672](https://github.com/Elnora-AI/elnora-mcp-server/commit/ce3c6729af13ba8bea886bffb91da9e4f728a7b8))
+
 ## [1.6.1](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v1.6.0...mcp-server-v1.6.1) (2026-07-14)
 
 
