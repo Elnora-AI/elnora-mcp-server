@@ -39,10 +39,11 @@ describe("elnora_folders_create", () => {
     expect(client.post).toHaveBeenCalledWith(`/folders`, { name: "Sub", parentFolderId: PARENT_ID });
   });
 
-  it("uses the legacy project endpoint when project is set", async () => {
+  it("no-ops the legacy project path (projects removed; no backend call)", async () => {
     const { client, invoke } = makeServerWithSpyClient();
-    await invoke("elnora_folders_create", { name: "Leg", project: PROJECT_ID });
-    expect(client.post).toHaveBeenCalledWith(`/projects/${PROJECT_ID}/folders`, { name: "Leg" });
+    const result = await invoke("elnora_folders_create", { name: "Leg", project: PROJECT_ID });
+    expect(client.post).not.toHaveBeenCalled();
+    expect(JSON.stringify(result)).toContain("deprecated");
   });
 });
 

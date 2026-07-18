@@ -5,6 +5,7 @@ import { RequestContext } from "../server.js";
 import { handleApiError } from "../services/error-handler.js";
 import { withGuard } from "./with-guard.js";
 import { OUTPUT_OPTIONS_SCHEMA } from "../services/response-formatter.js";
+import { projectsRemovedResult } from "../services/deprecated.js";
 
 export function registerFolderTools(
   server: McpServer,
@@ -103,7 +104,7 @@ export function registerFolderTools(
     "elnora_folders_list",
     {
       title: "elnora_folders_list",
-      description: "List folders in a project",
+      description: "[DEPRECATED] List folders in a project — projects were removed. Use `folders roots` and `folders children` to browse the Knowledge Base.",
       inputSchema: {
         projectId: z.string().uuid().describe("Project UUID"),
 
@@ -111,13 +112,12 @@ export function registerFolderTools(
       },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
-    withGuard("elnora_folders_list", getContext, async ({ projectId }) => {
-      try {
-        const result = await getClient().get(`/projects/${projectId}/folders`);
-        return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
-      } catch (error) {
-        return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
-      }
+    withGuard("elnora_folders_list", getContext, async () => {
+      // No-op: the legacy /projects/{id}/folders route is retired. Browse the KB
+      // via elnora_folders_roots + elnora_folders_children.
+      return projectsRemovedResult({
+        hint: "Use elnora_folders_roots and elnora_folders_children to browse Knowledge Base folders.",
+      });
     }),
   );
 
@@ -125,24 +125,28 @@ export function registerFolderTools(
     "elnora_folders_create",
     {
       title: "elnora_folders_create",
-      description: "Create a Knowledge Base folder (or a legacy project folder when project is set)",
+      description: "Create a Knowledge Base folder. (The legacy project-scoped path via `project` is deprecated and no longer supported.)",
       inputSchema: {
         name: z.string().min(1).max(255).describe("Folder name"),
         parentId: z.string().uuid().optional().describe("Parent folder UUID for nesting"),
-        project: z.string().uuid().optional().describe("Legacy: create a project-scoped folder instead of a Knowledge Base folder"),
+        project: z.string().uuid().optional().describe("[DEPRECATED] Legacy project-scoped folders were removed; this option is a no-op."),
 
         ...OUTPUT_OPTIONS_SCHEMA,
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
     withGuard("elnora_folders_create", getContext, async ({ name, parentId, project }) => {
+      if (project) {
+        // Legacy project-scoped folders were removed (ELN-880/881). No-op instead
+        // of calling the retired /projects/{id}/folders route.
+        return projectsRemovedResult({
+          hint: "Project-scoped folders were removed. Omit `project` to create a Knowledge Base folder.",
+        });
+      }
       try {
-        // Both the KB and legacy create bodies use `parentFolderId`.
         const body: Record<string, unknown> = { name };
         if (parentId) body.parentFolderId = parentId;
-        const result = project
-          ? await getClient().post(`/projects/${project}/folders`, body)
-          : await getClient().post(`/folders`, body);
+        const result = await getClient().post(`/folders`, body);
         return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
