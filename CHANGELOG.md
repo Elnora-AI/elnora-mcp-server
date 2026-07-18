@@ -5,6 +5,13 @@ All notable changes to the Elnora MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.7.0](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v1.6.2...mcp-server-v1.7.0) (2026-07-18)
+
+
+### Features
+
+* deprecate the project tools; Knowledge Base folder listing unchanged ([#283](https://github.com/Elnora-AI/elnora-mcp-server/issues/283)) ([0becf1b](https://github.com/Elnora-AI/elnora-mcp-server/commit/0becf1beff3f3e5deaabffb5e67524b2c8af49a5))
+
 ## [1.6.2](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v1.6.1...mcp-server-v1.6.2) (2026-07-15)
 
 
