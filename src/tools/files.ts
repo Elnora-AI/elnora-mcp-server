@@ -6,6 +6,7 @@ import { handleApiError } from "../services/error-handler.js";
 import { withGuard } from "./with-guard.js";
 import { CHARACTER_LIMIT } from "../constants.js";
 import { OUTPUT_OPTIONS_SCHEMA } from "../services/response-formatter.js";
+import { projectsRemovedResult } from "../services/deprecated.js";
 
 /**
  * File tools — names and params aligned with CLI `files.*` commands.
@@ -24,9 +25,10 @@ export function registerFileTools(
     "elnora_files_list",
     {
       title: "elnora_files_list",
-      description: "List files in a project",
+      description:
+        "List files in your workspace. (The legacy `project` filter is deprecated and no longer supported.)",
       inputSchema: {
-        project: z.string().uuid().optional().describe("Project UUID (optional; defaults to your workspace)"),
+        project: z.string().uuid().optional().describe("[DEPRECATED] Legacy project filter; projects were removed and this option is a no-op."),
         page: z.number().int().min(1).default(1).describe("Page number"),
         pageSize: z.number().int().min(1).max(100).default(25).describe("Results per page"),
 
@@ -35,12 +37,16 @@ export function registerFileTools(
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
     withGuard("elnora_files_list", getContext, async ({ project, page, pageSize }) => {
+      if (project) {
+        // Legacy project-scoped file listing was removed (ELN-880/881). No-op instead
+        // of calling the retired /projects/{id}/files route, which now 404s.
+        return projectsRemovedResult({
+          hint: "Project-scoped file listing was removed. Omit `project` to list every file in your workspace.",
+        });
+      }
       try {
-        // project is optional: with a project keep the legacy project-scoped listing;
-        // without one, list every file in the caller's workspace via GET /folders/files.
-        const result = project
-          ? await getClient().get(`/projects/${project}/files`, { page, pageSize })
-          : await getClient().get("/folders/files");
+        // GET /folders/files is a flat, org-wide list (capped at 200), no pagination.
+        const result = await getClient().get("/folders/files");
         return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
