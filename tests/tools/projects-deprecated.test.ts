@@ -41,6 +41,12 @@ const DEPRECATED_TOOL_CALLS: Array<[string, Record<string, unknown>]> = [
   ["elnora_projects_removeMember", { projectId: PROJECT_ID, userId: USER_ID }],
   ["elnora_projects_leave", { projectId: PROJECT_ID }],
   ["elnora_folders_list", { projectId: PROJECT_ID }],
+  ["elnora_folders_create", { name: "Leg", project: PROJECT_ID }],
+  // The legacy `project` filter on the list tools routed to /projects/{id}/tasks and
+  // /projects/{id}/files. Both were retired with everything else under /projects and
+  // returned NOT_FOUND to every MCP caller that passed `project`.
+  ["elnora_tasks_list", { project: PROJECT_ID, page: 1, pageSize: 25 }],
+  ["elnora_files_list", { project: PROJECT_ID, page: 1, pageSize: 25 }],
 ];
 
 describe("deprecated project tools are no-ops", () => {
@@ -56,4 +62,18 @@ describe("deprecated project tools are no-ops", () => {
       expect(JSON.stringify(result)).toContain("deprecated");
     });
   }
+});
+
+describe("the list tools are unaffected without a project", () => {
+  it("elnora_tasks_list still calls GET /tasks", async () => {
+    const { client, invoke } = makeServerWithSpyClient();
+    await invoke("elnora_tasks_list", { page: 1, pageSize: 25 });
+    expect(client.get).toHaveBeenCalledWith("/tasks", { page: 1, pageSize: 25, status: undefined });
+  });
+
+  it("elnora_files_list still calls GET /folders/files", async () => {
+    const { client, invoke } = makeServerWithSpyClient();
+    await invoke("elnora_files_list", { page: 1, pageSize: 25 });
+    expect(client.get).toHaveBeenCalledWith("/folders/files");
+  });
 });

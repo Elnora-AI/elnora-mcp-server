@@ -5,6 +5,7 @@ import { RequestContext } from "../server.js";
 import { handleApiError } from "../services/error-handler.js";
 import { withGuard } from "./with-guard.js";
 import { OUTPUT_OPTIONS_SCHEMA } from "../services/response-formatter.js";
+import { projectsRemovedResult } from "../services/deprecated.js";
 
 /**
  * Tasks tools (also includes messaging and fetching messages for a task,
@@ -22,9 +23,10 @@ export function registerTaskTools(
     "elnora_tasks_list",
     {
       title: "elnora_tasks_list",
-      description: "List tasks, optionally filtered by project or lifecycle status",
+      description:
+        "List tasks, optionally filtered by lifecycle status. (The legacy `project` filter is deprecated and no longer supported.)",
       inputSchema: {
-        project: z.string().uuid().optional().describe("Filter by project UUID"),
+        project: z.string().uuid().optional().describe("[DEPRECATED] Legacy project filter; projects were removed and this option is a no-op."),
         status: z.enum(["active", "archived", "all"]).optional().describe("Lifecycle filter: active (default), archived, or all"),
         page: z.number().int().min(1).default(1).describe("Page number"),
         pageSize: z.number().int().min(1).max(100).default(25).describe("Results per page"),
@@ -34,9 +36,15 @@ export function registerTaskTools(
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
     withGuard("elnora_tasks_list", getContext, async ({ project, status, page, pageSize }) => {
+      if (project) {
+        // Legacy project-scoped task listing was removed (ELN-880/881). No-op instead
+        // of calling the retired /projects/{id}/tasks route, which now 404s.
+        return projectsRemovedResult({
+          hint: "Project-scoped task listing was removed. Omit `project` to list every task in your workspace.",
+        });
+      }
       try {
-        const path = project ? `/projects/${project}/tasks` : "/tasks";
-        const result = await getClient().get(path, { page, pageSize, status });
+        const result = await getClient().get("/tasks", { page, pageSize, status });
         return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
       } catch (error) {
         return { content: [{ type: "text" as const, text: handleApiError(error) }], isError: true };
