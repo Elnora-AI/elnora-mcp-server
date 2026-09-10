@@ -27,6 +27,12 @@ jobs:
       - run: npm run build
       - run: npx tsc -p tsconfig.test.json --noEmit
       - run: npm test
+      - name: Build container image
+        run: docker build -t mcp-server:ci .
+      - name: Smoke the built image
+        run: |
+          docker run --rm --entrypoint node mcp-server:ci \
+            -p "process.versions.node + ' / openssl ' + process.versions.openssl"
       - name: Generate SBOM (CoSAI MCP-T11)
         run: npm sbom --sbom-format cyclonedx > sbom.json || echo '{"bomFormat":"CycloneDX","specVersion":"1.4","components":[]}' > sbom.json
       - name: Upload SBOM artifact
