@@ -50,6 +50,20 @@ function safeErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Unknown error";
 }
 
+/**
+ * A redirect URI is honoured only when it targets a loopback host (localhost / 127.0.0.1 / [::1]).
+ * Aligns the authorization flow with the registration hardening so that a client registered before
+ * that restriction cannot receive an authorization code at a non-loopback host.
+ */
+function isLoopbackRedirectUri(uri: string | undefined): boolean {
+  if (!uri) return false;
+  try {
+    return ["localhost", "127.0.0.1", "[::1]"].includes(new URL(uri).hostname);
+  } catch {
+    return false;
+  }
+}
+
 export class ElnoraOAuthProvider implements OAuthServerProvider {
   private _clientsStore: OAuthRegisteredClientsStore;
   private store: TokenStore;
@@ -81,6 +95,13 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
     // PKCE is mandatory — reject if code_challenge is missing (CoSAI MCP-T1)
     if (!params.codeChallenge) {
       throw new Error("PKCE code_challenge is required");
+    }
+
+    // Only loopback redirect URIs are honoured (aligned with registration hardening); this also blocks
+    // a client registered before that restriction from receiving the code at a non-loopback host.
+    if (!isLoopbackRedirectUri(params.redirectUri)) {
+      logAuthEvent("redirect_uri_rejected_non_loopback", client.client_id);
+      throw new Error("redirect_uri must be a loopback address");
     }
 
     // Generate a random state token for the platform callback (CSRF protection)
@@ -404,6 +425,13 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
     if (!clientRecord?.redirect_uris?.includes(session.redirectUri)) {
       logAuthEvent("redirect_uri_not_registered", session.clientId, { redirectUri: session.redirectUri });
       throw new Error("Redirect URI not registered for client");
+    }
+
+    // Deliver the authorization code only to a loopback redirect URI (aligned with registration
+    // hardening) — a registered non-loopback client must not receive the code.
+    if (!isLoopbackRedirectUri(session.redirectUri)) {
+      logAuthEvent("redirect_uri_rejected_non_loopback", session.clientId, { redirectUri: session.redirectUri });
+      throw new Error("Redirect URI not permitted");
     }
 
     // Build redirect URL in the same call — no second lookup needed
