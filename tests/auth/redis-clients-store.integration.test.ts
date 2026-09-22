@@ -129,11 +129,17 @@ describe.skipIf(!redisAvailable)("RedisClientsStore integration", () => {
       ).rejects.toThrow("redirect_uri must use HTTPS");
     });
 
-    it("accepts HTTPS redirect URIs", async () => {
+    it("rejects non-loopback HTTPS redirect URIs", async () => {
+      await expect(
+        store.registerClient({ redirect_uris: ["https://app.example.com/callback"] }),
+      ).rejects.toThrow("redirect_uri must be a loopback address");
+    });
+
+    it("accepts loopback HTTPS redirect URIs", async () => {
       const registered = await store.registerClient({
-        redirect_uris: ["https://app.example.com/callback"],
+        redirect_uris: ["https://localhost:3000/callback"],
       });
-      expect(registered.redirect_uris).toEqual(["https://app.example.com/callback"]);
+      expect(registered.redirect_uris).toEqual(["https://localhost:3000/callback"]);
     });
 
     it("accepts localhost HTTP redirect URIs", async () => {

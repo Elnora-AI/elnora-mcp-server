@@ -48,6 +48,12 @@ export class InMemoryClientsStore implements OAuthRegisteredClientsStore {
         if (parsed.protocol === "http:" && !["localhost", "127.0.0.1"].includes(parsed.hostname)) {
           throw new Error(`HTTP redirect_uri only allowed for localhost: ${uri}`);
         }
+        // Hardening: only loopback redirect URIs may be registered via open Dynamic Client
+        // Registration. Non-loopback (hosted) clients are onboarded through explicit review rather
+        // than open self-registration. Loopback clients (CLI / local IDE integrations) are unaffected.
+        if (!["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname)) {
+          throw new Error(`redirect_uri must be a loopback address (localhost, 127.0.0.1, or [::1]): ${uri}`);
+        }
       }
     }
 
