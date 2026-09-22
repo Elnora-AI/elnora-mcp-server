@@ -5,6 +5,13 @@ All notable changes to the Elnora MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.7.11](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v1.7.10...mcp-server-v1.7.11) (2026-09-22)
+
+
+### Bug Fixes
+
+* **auth:** enforce loopback-only redirect URIs at authorization, not just registration ([#353](https://github.com/Elnora-AI/elnora-mcp-server/issues/353)) ([424ccae](https://github.com/Elnora-AI/elnora-mcp-server/commit/424ccae2b4574a8837865b465ace6825bce1164c))
+
 ## [1.7.10](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v1.7.9...mcp-server-v1.7.10) (2026-09-22)
 
 
