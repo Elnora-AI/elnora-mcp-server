@@ -243,6 +243,19 @@ describe("ElnoraOAuthProvider", () => {
         "Unsupported scopes requested: evil:scope",
       );
     });
+
+    it("rejects a non-loopback redirect_uri at authorize", async () => {
+      const client = { client_id: "test-client", redirect_uris: ["https://app.example.com/cb"] };
+      const params = {
+        codeChallenge: "challenge",
+        redirectUri: "https://app.example.com/cb",
+        scopes: ["tasks:read"],
+        state: "s",
+      };
+      const res = { redirect: vi.fn() } as never;
+
+      await expect(provider.authorize(client, params, res)).rejects.toThrow("must be a loopback address");
+    });
   });
 
   describe("handlePlatformCallback", () => {
@@ -250,6 +263,35 @@ describe("ElnoraOAuthProvider", () => {
       await expect(provider.handlePlatformCallback("invalid", "platform-code", "some-state")).rejects.toThrow(
         "Invalid or expired MCP authorization code",
       );
+    });
+
+    it("refuses to deliver the code to a non-loopback redirect (pre-existing client)", async () => {
+      const tokenStore = new InMemoryTokenStore();
+      const clientsStore = new InMemoryClientsStore();
+      const p = new ElnoraOAuthProvider(config, tokenStore, clientsStore);
+      const registered = await clientsStore.registerClient!({ redirect_uris: ["http://localhost:3000/callback"] });
+      // Simulate a client whose redirect_uri predates the loopback restriction.
+      const stored = await clientsStore.getClient(registered.client_id);
+      stored!.redirect_uris = ["https://attacker.example.com/cb"];
+
+      const platformState = "pstate";
+      await tokenStore.setSession(
+        "mcpcode-nonloopback",
+        {
+          clientId: registered.client_id,
+          codeChallenge: "challenge",
+          redirectUri: "https://attacker.example.com/cb",
+          scopes: ["tasks:read"],
+          state: "cli-state",
+          platformState,
+          createdAt: Date.now(),
+        },
+        300,
+      );
+
+      await expect(
+        p.handlePlatformCallback("mcpcode-nonloopback", "platform-code", platformState),
+      ).rejects.toThrow("Redirect URI not permitted");
     });
 
     it("throws on state mismatch (CSRF protection)", async () => {
