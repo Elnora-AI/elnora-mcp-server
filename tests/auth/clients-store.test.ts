@@ -77,10 +77,17 @@ describe("InMemoryClientsStore", () => {
     );
   });
 
-  it("accepts HTTPS redirect URIs", () => {
+  it("rejects non-loopback HTTPS redirect URIs", () => {
     const store = new InMemoryClientsStore();
-    const registered = store.registerClient({ redirect_uris: ["https://app.example.com/callback"] });
-    expect(registered.redirect_uris).toEqual(["https://app.example.com/callback"]);
+    expect(() => store.registerClient({ redirect_uris: ["https://app.example.com/callback"] })).toThrow(
+      "redirect_uri must be a loopback address",
+    );
+  });
+
+  it("accepts loopback HTTPS redirect URIs", () => {
+    const store = new InMemoryClientsStore();
+    const registered = store.registerClient({ redirect_uris: ["https://localhost:3000/callback"] });
+    expect(registered.redirect_uris).toEqual(["https://localhost:3000/callback"]);
   });
 
   it("accepts localhost HTTP redirect URIs", () => {
