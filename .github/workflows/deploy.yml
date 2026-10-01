@@ -18,7 +18,10 @@ env:
 jobs:
   deploy:
     name: Deploy MCP Server
-    runs-on: ubuntu-latest
+    # Pinned, not ubuntu-latest: ubuntu-latest moves to Ubuntu 26.04 in Oct-Nov
+    # 2026 (actions/runner-images#14748), which ships a new major Docker version.
+    # Unpin once the image build and push are verified on ubuntu-26.04.
+    runs-on: ubuntu-24.04
     env:
       RELEASE_TAG: ${{ github.event.release.tag_name }}
       EVENT_NAME: ${{ github.event_name }}
