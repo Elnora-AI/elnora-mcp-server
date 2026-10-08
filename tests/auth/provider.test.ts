@@ -55,7 +55,8 @@ describe("ElnoraOAuthProvider", () => {
         state: "test-state",
       };
       const redirectFn = vi.fn();
-      const res = { redirect: redirectFn } as never;
+      const cookieFn = vi.fn();
+      const res = { redirect: redirectFn, cookie: cookieFn, clearCookie: vi.fn() } as never;
 
       await provider.authorize(client, params, res);
 
@@ -77,7 +78,8 @@ describe("ElnoraOAuthProvider", () => {
         redirectUri: "http://localhost:3000/callback",
       };
       const redirectFn = vi.fn();
-      const res = { redirect: redirectFn } as never;
+      const cookieFn = vi.fn();
+      const res = { redirect: redirectFn, cookie: cookieFn, clearCookie: vi.fn() } as never;
 
       await provider.authorize(client, params, res);
       const redirectUrl = new URL(redirectFn.mock.calls[0][0]);
@@ -107,15 +109,17 @@ describe("ElnoraOAuthProvider", () => {
         scopes: ["tasks:read"],
       };
       const redirectFn = vi.fn();
-      const res = { redirect: redirectFn } as never;
+      const cookieFn = vi.fn();
+      const res = { redirect: redirectFn, cookie: cookieFn, clearCookie: vi.fn() } as never;
 
       await provider.authorize(client, params, res);
       const redirectUrl = new URL(redirectFn.mock.calls[0][0]);
       const mcpCode = redirectUrl.searchParams.get("mcp_code")!;
 
-      // Simulate platform callback
+      // Simulate platform callback (same browser → presents the binding cookie set at authorize)
       const platformState = redirectUrl.searchParams.get("state")!;
-      await provider.handlePlatformCallback(mcpCode, "platform-auth-code", platformState);
+      const binding = cookieFn.mock.calls[0][1] as string;
+      await provider.handlePlatformCallback(mcpCode, "platform-auth-code", platformState, binding);
 
       // Mock platform token exchange
       vi.mocked(axios.post).mockResolvedValueOnce({
@@ -147,7 +151,8 @@ describe("ElnoraOAuthProvider", () => {
         redirectUri: "http://localhost:3000/callback",
       };
       const redirectFn = vi.fn();
-      const res = { redirect: redirectFn } as never;
+      const cookieFn = vi.fn();
+      const res = { redirect: redirectFn, cookie: cookieFn, clearCookie: vi.fn() } as never;
 
       await provider.authorize(client, params, res);
       const redirectUrl = new URL(redirectFn.mock.calls[0][0]);
@@ -170,14 +175,16 @@ describe("ElnoraOAuthProvider", () => {
         scopes: ["tasks:read"],
       };
       const redirectFn = vi.fn();
-      const res = { redirect: redirectFn } as never;
+      const cookieFn = vi.fn();
+      const res = { redirect: redirectFn, cookie: cookieFn, clearCookie: vi.fn() } as never;
 
       await provider.authorize(client, params, res);
       const redirectUrl = new URL(redirectFn.mock.calls[0][0]);
       const mcpCode = redirectUrl.searchParams.get("mcp_code")!;
 
       const platformState2 = redirectUrl.searchParams.get("state")!;
-      await provider.handlePlatformCallback(mcpCode, "platform-auth-code", platformState2);
+      const binding = cookieFn.mock.calls[0][1] as string;
+      await provider.handlePlatformCallback(mcpCode, "platform-auth-code", platformState2, binding);
 
       await expect(
         provider.exchangeAuthorizationCode(client, mcpCode, undefined, "http://evil.example.com/callback"),
@@ -192,7 +199,8 @@ describe("ElnoraOAuthProvider", () => {
         redirectUri: "http://localhost:3000/callback",
       };
       const redirectFn = vi.fn();
-      const res = { redirect: redirectFn } as never;
+      const cookieFn = vi.fn();
+      const res = { redirect: redirectFn, cookie: cookieFn, clearCookie: vi.fn() } as never;
 
       await provider.authorize(client1, params, res);
       const redirectUrl = new URL(redirectFn.mock.calls[0][0]);
@@ -284,13 +292,14 @@ describe("ElnoraOAuthProvider", () => {
           scopes: ["tasks:read"],
           state: "cli-state",
           platformState,
+          browserBinding: "test-binding",
           createdAt: Date.now(),
         },
         300,
       );
 
       await expect(
-        p.handlePlatformCallback("mcpcode-nonloopback", "platform-code", platformState),
+        p.handlePlatformCallback("mcpcode-nonloopback", "platform-code", platformState, "test-binding"),
       ).rejects.toThrow("Redirect URI not permitted");
     });
 
@@ -305,7 +314,8 @@ describe("ElnoraOAuthProvider", () => {
         state: "my-state",
       };
       const redirectFn = vi.fn();
-      const res = { redirect: redirectFn } as never;
+      const cookieFn = vi.fn();
+      const res = { redirect: redirectFn, cookie: cookieFn, clearCookie: vi.fn() } as never;
 
       await provider.authorize(client, params, res);
       const loginUrl = new URL(redirectFn.mock.calls[0][0]);
@@ -326,14 +336,16 @@ describe("ElnoraOAuthProvider", () => {
         redirectUri: "http://localhost:3000/callback",
       };
       const redirectFn = vi.fn();
-      const res = { redirect: redirectFn } as never;
+      const cookieFn = vi.fn();
+      const res = { redirect: redirectFn, cookie: cookieFn, clearCookie: vi.fn() } as never;
 
       await provider.authorize(client, params, res);
       const loginUrl = new URL(redirectFn.mock.calls[0][0]);
       const mcpCode = loginUrl.searchParams.get("mcp_code")!;
       const platformState = loginUrl.searchParams.get("state")!;
 
-      await expect(provider.handlePlatformCallback(mcpCode, "", platformState)).rejects.toThrow(
+      const binding = cookieFn.mock.calls[0][1] as string;
+      await expect(provider.handlePlatformCallback(mcpCode, "", platformState, binding)).rejects.toThrow(
         "Platform authorization code is empty",
       );
     });
@@ -349,20 +361,92 @@ describe("ElnoraOAuthProvider", () => {
         state: "my-state",
       };
       const redirectFn = vi.fn();
-      const res = { redirect: redirectFn } as never;
+      const cookieFn = vi.fn();
+      const res = { redirect: redirectFn, cookie: cookieFn, clearCookie: vi.fn() } as never;
 
       await provider.authorize(client, params, res);
       const loginUrl = new URL(redirectFn.mock.calls[0][0]);
       const mcpCode = loginUrl.searchParams.get("mcp_code")!;
       const platformState = loginUrl.searchParams.get("state")!;
 
-      const redirectUrl = await provider.handlePlatformCallback(mcpCode, "platform-code", platformState);
+      const binding = cookieFn.mock.calls[0][1] as string;
+      const redirectUrl = await provider.handlePlatformCallback(mcpCode, "platform-code", platformState, binding);
       const parsed = new URL(redirectUrl);
 
       expect(parsed.origin).toBe("http://localhost:3000");
       expect(parsed.pathname).toBe("/callback");
       expect(parsed.searchParams.get("code")).toBe(mcpCode);
       expect(parsed.searchParams.get("state")).toBe("my-state");
+    });
+  });
+
+  describe("handlePlatformCallback — user-agent binding (RFC 9700)", () => {
+    async function startFlow() {
+      const registered = await provider.clientsStore.registerClient!({
+        redirect_uris: ["http://localhost:3000/callback"],
+      });
+      const client = { client_id: registered.client_id, redirect_uris: ["http://localhost:3000/callback"] };
+      const params = { codeChallenge: "challenge", redirectUri: "http://localhost:3000/callback", state: "cli-state" };
+      const redirectFn = vi.fn();
+      const cookieFn = vi.fn();
+      const res = { redirect: redirectFn, cookie: cookieFn, clearCookie: vi.fn() } as never;
+      await provider.authorize(client, params as never, res);
+      const url = new URL(redirectFn.mock.calls[0][0]);
+      return {
+        client,
+        mcpCode: url.searchParams.get("mcp_code")!,
+        platformState: url.searchParams.get("state")!,
+        binding: cookieFn.mock.calls[0][1] as string,
+        cookieName: cookieFn.mock.calls[0][0] as string,
+        cookieOpts: cookieFn.mock.calls[0][2] as Record<string, unknown>,
+      };
+    }
+
+    it("authorize sets a host-locked, HttpOnly, SameSite=Lax session binding cookie", async () => {
+      const { cookieName, cookieOpts, binding } = await startFlow();
+      expect(cookieName).toBe("__Host-mcp_authz_binding"); // https config → __Host- prefix
+      expect(binding).toMatch(/^[A-Za-z0-9_-]{43}$/); // 32 random bytes, base64url
+      expect(cookieOpts).toMatchObject({ httpOnly: true, sameSite: "lax", secure: true, path: "/" });
+      expect(cookieOpts.maxAge).toBeUndefined(); // session cookie — server-side TTL is the gate
+    });
+
+    it("rejects when the binding cookie is ABSENT", async () => {
+      const { mcpCode, platformState } = await startFlow();
+      await expect(
+        provider.handlePlatformCallback(mcpCode, "platform-code", platformState, undefined),
+      ).rejects.toThrow("Authorization session could not be verified");
+    });
+
+    it("rejects when the binding cookie MISMATCHES the session", async () => {
+      const { mcpCode, platformState } = await startFlow();
+      await expect(
+        provider.handlePlatformCallback(mcpCode, "platform-code", platformState, "not-the-right-value"),
+      ).rejects.toThrow("Authorization session could not be verified");
+    });
+
+    it("rejects when the binding cookie is AMBIGUOUS (duplicate name → null)", async () => {
+      const { mcpCode, platformState } = await startFlow();
+      await expect(
+        provider.handlePlatformCallback(mcpCode, "platform-code", platformState, null),
+      ).rejects.toThrow("Authorization session could not be verified");
+    });
+
+    it("accepts when the binding cookie MATCHES (same browser)", async () => {
+      const { mcpCode, platformState, binding } = await startFlow();
+      const redirectUrl = await provider.handlePlatformCallback(mcpCode, "platform-code", platformState, binding);
+      expect(new URL(redirectUrl).searchParams.get("code")).toBe(mcpCode);
+    });
+
+    it("does NOT bind the platform code when the binding fails (single-mutation invariant)", async () => {
+      const { client, mcpCode, platformState } = await startFlow();
+      // A rejected callback (wrong binding) must not store the platform code...
+      await expect(
+        provider.handlePlatformCallback(mcpCode, "unbound-platform-code", platformState, "wrong"),
+      ).rejects.toThrow("Authorization session could not be verified");
+      // ...so a subsequent token exchange still reports the platform step as not completed.
+      await expect(
+        provider.exchangeAuthorizationCode(client, mcpCode, undefined, "http://localhost:3000/callback"),
+      ).rejects.toThrow("Platform authentication not completed");
     });
   });
 });

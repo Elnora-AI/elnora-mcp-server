@@ -16,6 +16,7 @@ import { RedisClientsStore } from "./auth/redis-clients-store.js";
 import { TokenStore } from "./auth/token-store.js";
 import { resolveApiKeyFromHeaders } from "./auth/api-key-header.js";
 import { validateApiKey } from "./auth/validate-api-key.js";
+import { authzBindingCookieName, readSingleCookie, bindingCookieOptions } from "./auth/authz-binding.js";
 import rateLimit from "express-rate-limit";
 
 function requireEnv(name: string): string {
@@ -135,8 +136,15 @@ async function main(): Promise<void> {
       return;
     }
 
+    // Read the one-time user-agent binding cookie set at /authorize (RFC 9700). undefined = absent,
+    // null = duplicate/ambiguous; the provider fails closed on either.
+    const bindingCookieName = authzBindingCookieName(config.publicUrl);
+    const browserBinding = readSingleCookie(req.headers.cookie, bindingCookieName);
+
     try {
-      const redirectUrl = await provider.handlePlatformCallback(mcpCode, platformCode, platformState);
+      const redirectUrl = await provider.handlePlatformCallback(mcpCode, platformCode, platformState, browserBinding);
+      // Binding is single-use — clear it (same attributes as set, required for __Host- cookies).
+      res.clearCookie(bindingCookieName, bindingCookieOptions(config.publicUrl));
       res.redirect(redirectUrl);
     } catch (err) {
       logAuthEvent("platform_callback_failed", "unknown", { error: String(err) });
