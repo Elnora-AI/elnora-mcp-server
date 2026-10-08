@@ -65,7 +65,9 @@
     "minimatch": "^10.2.4",
     "path-to-regexp": "^8.4.0",
     "vite": ">=8.0.5",
-    "esbuild": "0.28.1"
+    "esbuild": "0.28.1",
+    "source-map-js": ">=1.2.2",
+    "proxy-addr": ">=2.0.8"
   },
   "devDependencies": {
     "@types/express": "^5.0.0",
