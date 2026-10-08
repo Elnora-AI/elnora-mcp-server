@@ -13,6 +13,7 @@ import { InvalidTokenError, ServerError } from "@modelcontextprotocol/sdk/server
 import { TokenStore } from "./token-store.js";
 import { ElnoraConfig, TokenRecord } from "../types.js";
 import { logAuthEvent } from "../middleware/tool-logging.js";
+import { authzBindingCookieName, newBindingValue, bindingCookieOptions, safeBindingEqual } from "./authz-binding.js";
 import {
   ACCESS_TOKEN_TTL_SECONDS,
   REFRESH_TOKEN_TTL_SECONDS,
@@ -115,6 +116,10 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
       throw new Error(`Unsupported scopes requested: ${unsupported.join(", ")}`);
     }
 
+    // One-time value bound to the initiating user agent (RFC 9700): stored on the session and
+    // set as a host-locked cookie below; the callback must present a cookie that matches it.
+    const browserBinding = newBindingValue();
+
     // Store session for later exchange
     await this.store.setSession(authCode, {
       clientId: client.client_id,
@@ -124,6 +129,7 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
       state: params.state,
       resource: params.resource?.toString(),
       platformState,
+      browserBinding,
       createdAt: Date.now(),
     }, AUTH_CODE_TTL_SECONDS);
 
@@ -133,6 +139,10 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
     loginUrl.searchParams.set("redirect_uri", `${this.config.publicUrl}/oauth/callback`);
     loginUrl.searchParams.set("client_id", this.config.platformClientId);
     loginUrl.searchParams.set("state", platformState);
+
+    // Bind the request to this user agent — the callback requires this cookie to match (RFC 9700).
+    // Set before redirect so the Set-Cookie is carried on the 302.
+    res.cookie(authzBindingCookieName(this.config.publicUrl), browserBinding, bindingCookieOptions(this.config.publicUrl));
 
     logAuthEvent("authorize_redirect", client.client_id);
     res.redirect(loginUrl.toString());
@@ -392,7 +402,12 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
    * client redirect URL atomically (single session lookup, no race window).
    * Verifies platformState to prevent CSRF / code substitution attacks.
    */
-  async handlePlatformCallback(mcpCode: string, platformCode: string, platformState: string): Promise<string> {
+  async handlePlatformCallback(
+    mcpCode: string,
+    platformCode: string,
+    platformState: string,
+    browserBinding?: string | null,
+  ): Promise<string> {
     const session = await this.store.getSession(mcpCode);
     if (!session) {
       throw new Error("Invalid or expired MCP authorization code");
@@ -402,6 +417,22 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
     if (!platformState || platformState !== session.platformState) {
       logAuthEvent("platform_callback_state_mismatch", session.clientId);
       throw new Error("State parameter mismatch — possible CSRF attack");
+    }
+
+    // Bind the callback to the user agent that initiated /authorize (RFC 9700): the one-time binding
+    // cookie proves same-user-agent (the platform state above is known to the initiator, so it does
+    // not). The constant-time comparison is the single authoritative gate — it returns false for an
+    // absent, ambiguous (duplicate cookie → null), or mismatched binding alike, so the flow fails
+    // closed. The reason below only labels the telemetry event; it does not decide the rejection.
+    if (!safeBindingEqual(browserBinding, session.browserBinding)) {
+      const reason =
+        browserBinding === null
+          ? "authz_browser_binding_duplicate"
+          : !browserBinding
+            ? "authz_browser_binding_absent"
+            : "authz_browser_binding_mismatch";
+      logAuthEvent(reason, session.clientId);
+      throw new Error("Authorization session could not be verified");
     }
 
     // Prevent callback replay — each callback can only be processed once
@@ -414,11 +445,6 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
     if (!platformCode) {
       throw new Error("Platform authorization code is empty");
     }
-
-    // Store the platform code for later exchange
-    await this.store.updateSession(mcpCode, { platformCode });
-
-    logAuthEvent("platform_callback_completed", session.clientId);
 
     // Validate redirect_uri against registered client before redirecting (prevents open redirect)
     const clientRecord = await this._clientsStore.getClient(session.clientId);
@@ -433,6 +459,11 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
       logAuthEvent("redirect_uri_rejected_non_loopback", session.clientId, { redirectUri: session.redirectUri });
       throw new Error("Redirect URI not permitted");
     }
+
+    // All validations passed — bind the platform code to the session (single mutation, performed last).
+    await this.store.updateSession(mcpCode, { platformCode });
+
+    logAuthEvent("platform_callback_completed", session.clientId);
 
     // Build redirect URL in the same call — no second lookup needed
     const redirectUrl = new URL(session.redirectUri);
