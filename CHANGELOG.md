@@ -5,6 +5,14 @@ All notable changes to the Elnora MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.7.14](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v1.7.13...mcp-server-v1.7.14) (2026-10-08)
+
+
+### Bug Fixes
+
+* **auth:** bind the authorization request to the initiating user agent ([#375](https://github.com/Elnora-AI/elnora-mcp-server/issues/375)) ([82f9aae](https://github.com/Elnora-AI/elnora-mcp-server/commit/82f9aae62f8fa33be7545d52facfe3db262c16ea))
+* **deps:** bump 2 dependencies ([#374](https://github.com/Elnora-AI/elnora-mcp-server/issues/374)) ([01b75fd](https://github.com/Elnora-AI/elnora-mcp-server/commit/01b75fdc210fc5ad9c382d2c64c955db59fd8a7a))
+
 ## [1.7.13](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v1.7.12...mcp-server-v1.7.13) (2026-10-01)
 
 
