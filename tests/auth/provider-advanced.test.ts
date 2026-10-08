@@ -39,14 +39,16 @@ async function issueTokens(provider: ElnoraOAuthProvider) {
     scopes: ["tasks:read"],
   };
   const redirectFn = vi.fn();
-  const res = { redirect: redirectFn } as never;
+  const cookieFn = vi.fn();
+  const res = { redirect: redirectFn, cookie: cookieFn, clearCookie: vi.fn() } as never;
 
   await provider.authorize(client, params, res);
   const redirectUrl = new URL(redirectFn.mock.calls[0][0]);
   const mcpCode = redirectUrl.searchParams.get("mcp_code")!;
 
   const platformState = redirectUrl.searchParams.get("state")!;
-  await provider.handlePlatformCallback(mcpCode, "platform-auth-code", platformState);
+  const browserBinding = cookieFn.mock.calls[0][1] as string;
+  await provider.handlePlatformCallback(mcpCode, "platform-auth-code", platformState, browserBinding);
 
   vi.mocked(axios.post).mockResolvedValueOnce({
     data: { access_token: "platform-token-123", refresh_token: "platform-refresh-token-123" },
@@ -235,16 +237,18 @@ describe("ElnoraOAuthProvider — advanced flows", () => {
         scopes: ["tasks:read"],
       };
       const redirectFn = vi.fn();
-      const res = { redirect: redirectFn } as never;
+      const cookieFn = vi.fn();
+      const res = { redirect: redirectFn, cookie: cookieFn, clearCookie: vi.fn() } as never;
 
       await provider.authorize(client, params, res);
       const redirectUrl = new URL(redirectFn.mock.calls[0][0]);
       const mcpCode = redirectUrl.searchParams.get("mcp_code")!;
       const platformState = redirectUrl.searchParams.get("state")!;
+      const browserBinding = cookieFn.mock.calls[0][1] as string;
 
-      await provider.handlePlatformCallback(mcpCode, "platform-code-1", platformState);
+      await provider.handlePlatformCallback(mcpCode, "platform-code-1", platformState, browserBinding);
 
-      await expect(provider.handlePlatformCallback(mcpCode, "platform-code-2", platformState)).rejects.toThrow(
+      await expect(provider.handlePlatformCallback(mcpCode, "platform-code-2", platformState, browserBinding)).rejects.toThrow(
         "Authorization callback already processed",
       );
     });

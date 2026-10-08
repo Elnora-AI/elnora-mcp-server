@@ -29,6 +29,8 @@ export interface AuthorizationSession {
   platformCode?: string;
   /** Random state token sent to platform login — verified on callback (CSRF protection) */
   platformState: string;
+  /** One-time value bound to the initiating user agent via a cookie — verified on callback (RFC 9700) */
+  browserBinding: string;
   createdAt: number;
 }
 
