@@ -1,0 +1,328 @@
+import crypto from "node:crypto";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { mcpAuthRouter, getOAuthProtectedResourceMetadataUrl } from "@modelcontextprotocol/sdk/server/auth/router.js";
+import { requireBearerAuth } from "@modelcontextprotocol/sdk/server/auth/middleware/bearerAuth.js";
+import { AuthInfo } from "@modelcontextprotocol/sdk/server/auth/types.js";
+import { OAuthRegisteredClientsStore } from "@modelcontextprotocol/sdk/server/auth/clients.js";
+import express, { Request, Response, NextFunction } from "express";
+import rateLimit from "express-rate-limit";
+import { ElnoraConfig } from "./types.js";
+import { ElnoraApiClient } from "./services/elnora-api-client.js";
+import { ElnoraOAuthProvider } from "./auth/provider.js";
+import { createElnoraServer } from "./server.js";
+import { corsMiddleware } from "./middleware/cors.js";
+import { SUPPORTED_SCOPES, ALL_SCOPES } from "./constants.js";
+import { logAuthEvent } from "./middleware/tool-logging.js";
+import { TokenStore } from "./auth/token-store.js";
+import { resolveApiKeyFromHeaders } from "./auth/api-key-header.js";
+import { validateApiKey } from "./auth/validate-api-key.js";
+import { authzBindingCookieName, readSingleCookie, bindingCookieOptions } from "./auth/authz-binding.js";
+import { renderConsentErrorPage, CONSENT_CSP } from "./auth/consent-page.js";
+
+/**
+ * Build the Express app with all middleware and routes. Lifecycle (store connection, listen,
+ * heartbeat, graceful shutdown) stays in index.ts; keeping construction here lets tests boot the full
+ * HTTP surface with in-memory stores and no Redis.
+ */
+export function createApp(
+  config: ElnoraConfig,
+  store: TokenStore,
+  clientsStore: OAuthRegisteredClientsStore,
+): express.Express {
+  const app = express();
+
+  // Trust one proxy hop (ALB) so X-Forwarded-For is used for req.ip
+  // Required for express-rate-limit to identify clients correctly behind ALB
+  app.set("trust proxy", 1);
+
+  // --- Security middleware (CoSAI MCP-T7) ---
+  app.use(corsMiddleware(config));
+  app.use(express.json({ limit: "1mb" })); // Payload size limit (CoSAI MCP-T10)
+
+  // Security headers — defense-in-depth (CoSAI MCP-T7)
+  app.use((_req, res, next) => {
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("X-Frame-Options", "DENY");
+    res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+    res.setHeader("X-XSS-Protection", "0"); // Disabled per OWASP (modern browsers don't need it)
+    res.setHeader("Strict-Transport-Security", "max-age=63072000; includeSubDomains");
+    res.setHeader("Cache-Control", "no-store");
+    next();
+  });
+
+  // Health check — verifies Redis connectivity
+  app.get("/health", async (_req, res) => {
+    try {
+      await store.ping();
+      res.json({ status: "ok", service: "elnora-mcp-server", redis: "connected" });
+    } catch {
+      res.status(503).json({ status: "degraded", service: "elnora-mcp-server", redis: "disconnected" });
+    }
+  });
+
+  // --- OAuth 2.1 Authorization Server ---
+  const provider = new ElnoraOAuthProvider(config, store, clientsStore);
+  const issuerUrl = new URL(config.publicUrl);
+  const mcpServerUrl = new URL(`${config.publicUrl}/mcp`);
+
+  // Install OAuth routes: /.well-known/oauth-authorization-server,
+  // /.well-known/oauth-protected-resource, /authorize, /token, /register, /revoke
+  app.use(
+    mcpAuthRouter({
+      provider,
+      issuerUrl,
+      resourceServerUrl: mcpServerUrl,
+      scopesSupported: [...SUPPORTED_SCOPES],
+      resourceName: "Elnora MCP Server",
+      serviceDocumentationUrl: new URL("https://github.com/Elnora-AI/elnora-mcp-server"),
+    }),
+  );
+
+  // Platform OAuth callback — receives the auth code from Elnora platform login
+  // CSRF protection: validates mcp_code exists in our session store (CoSAI MCP-T7)
+  // Rate limited to prevent brute-force auth code guessing (CoSAI MCP-T10)
+  const callbackLimiter = rateLimit({
+    windowMs: 60_000,
+    limit: 20,
+    standardHeaders: "draft-7",
+    legacyHeaders: false,
+    message: { error: "rate_limit_exceeded", error_description: "Too many callback requests. Please retry later." },
+  });
+  app.get("/oauth/callback", callbackLimiter, async (req, res) => {
+    const mcpCode = req.query.mcp_code as string;
+    const platformCode = req.query.code as string;
+    const platformState = req.query.state as string;
+
+    // All parameters are required for a valid callback — reject if any is missing.
+    // An OAuth error response from the platform will also lack `code`, so it's caught here.
+    if (!mcpCode || !platformCode || !platformState) {
+      const errorParam = req.query.error;
+      const context = typeof errorParam === "string" ? errorParam.replace(/[\x00-\x1f\x7f]/g, "").slice(0, 200) : "missing_params";
+      logAuthEvent("platform_callback_error", "unknown", { reason: context });
+      res.status(400).json({ error: "invalid_request", error_description: "Missing mcp_code, code, or state parameter" });
+      return;
+    }
+
+    // Read the one-time user-agent binding cookie set at /authorize (RFC 9700). undefined = absent,
+    // null = duplicate/ambiguous; the provider fails closed on either.
+    const bindingCookieName = authzBindingCookieName(config.publicUrl);
+    const browserBinding = readSingleCookie(req.headers.cookie, bindingCookieName);
+
+    try {
+      const redirectUrl = await provider.handlePlatformCallback(mcpCode, platformCode, platformState, browserBinding);
+      // Binding is single-use — clear it (same attributes as set, required for __Host- cookies).
+      res.clearCookie(bindingCookieName, bindingCookieOptions(config.publicUrl));
+      res.redirect(redirectUrl);
+    } catch (err) {
+      logAuthEvent("platform_callback_failed", "unknown", { error: String(err) });
+      res.status(400).json({
+        error: "invalid_grant",
+        error_description: "Authorization callback failed",
+      });
+    }
+  });
+
+  // Consent decision from the MCP-server-rendered consent screen (non-loopback / hosted clients).
+  // The decision is bound to the initiating user agent by the same __Host- cookie set at /authorize
+  // (SameSite=Lax + HttpOnly), so a cross-site POST cannot carry it and the binding check fails closed
+  // — that is the CSRF defense; X-Frame-Options: DENY (above) blocks clickjacking the buttons.
+  const consentLimiter = rateLimit({
+    windowMs: 60_000,
+    limit: 20,
+    standardHeaders: "draft-7",
+    legacyHeaders: false,
+    message: { error: "rate_limit_exceeded", error_description: "Too many requests. Please retry later." },
+  });
+  app.post("/oauth/consent", consentLimiter, express.urlencoded({ extended: false, limit: "10kb" }), async (req, res) => {
+    const decision = typeof req.body?.decision === "string" ? req.body.decision : "";
+    const mcpCode = typeof req.body?.mcp_code === "string" ? req.body.mcp_code : "";
+    const bindingCookieName = authzBindingCookieName(config.publicUrl);
+    const browserBinding = readSingleCookie(req.headers.cookie, bindingCookieName);
+
+    const sendError = (message: string) => {
+      res.status(400);
+      res.setHeader("Content-Security-Policy", CONSENT_CSP);
+      res.type("html").send(renderConsentErrorPage(message));
+    };
+
+    if (decision !== "allow" && decision !== "deny") {
+      logAuthEvent("consent_invalid_decision", "unknown");
+      sendError("Invalid request. Please start the connection again.");
+      return;
+    }
+
+    try {
+      if (decision === "allow") {
+        // Keep the binding cookie — it is still required when the platform callback lands.
+        const loginUrl = await provider.grantConsent(mcpCode, browserBinding);
+        res.redirect(loginUrl);
+      } else {
+        const redirectUrl = await provider.denyConsent(mcpCode, browserBinding);
+        res.clearCookie(bindingCookieName, bindingCookieOptions(config.publicUrl));
+        res.redirect(redirectUrl);
+      }
+    } catch (err) {
+      logAuthEvent("consent_failed", "unknown", { error: String(err) });
+      sendError("This authorization request could not be verified or has expired. Please start the connection again.");
+    }
+  });
+
+  // --- Auth middleware for /mcp endpoint ---
+  const oauthMiddleware = requireBearerAuth({
+    verifier: provider,
+    requiredScopes: [],
+    resourceMetadataUrl: getOAuthProtectedResourceMetadataUrl(mcpServerUrl),
+  });
+
+  // Rate limiter for /mcp — applied at app level so CodeQL sees it (CoSAI MCP-T10)
+  // Non-crypto hash for rate-limiter bucket keys. We only need consistent mapping,
+  // not cryptographic security — FNV-1a is fast and avoids CodeQL's password-hash rule.
+  function bucketHash(value: string): string {
+    let h = 0x811c9dc5;
+    for (let i = 0; i < value.length; i++) {
+      h ^= value.charCodeAt(i);
+      h = Math.imul(h, 0x01000193) >>> 0;
+    }
+    return h.toString(16).padStart(8, "0");
+  }
+  app.use("/mcp", rateLimit({
+    windowMs: 60_000,
+    limit: 150,
+    standardHeaders: "draft-7",
+    legacyHeaders: false,
+    keyGenerator: (req) => {
+      const authHeader = req.headers.authorization;
+      const apiKeyHeader = req.headers["x-api-key"];
+      if (authHeader) return `auth:${bucketHash(authHeader)}`;
+      if (apiKeyHeader) return `key:${bucketHash(String(apiKeyHeader))}`;
+      const ip = req.ip || req.socket.remoteAddress;
+      if (!ip) return `ip:unresolved:${crypto.randomUUID()}`;
+      // Normalize IPv6-mapped IPv4 (e.g. ::ffff:127.0.0.1 → 127.0.0.1)
+      const normalized = ip.startsWith("::ffff:") ? ip.slice(7) : ip;
+      return `ip:${normalized}`;
+    },
+    message: { error: "rate_limit_exceeded", error_description: "Too many requests. Please retry later." },
+  }));
+
+  /**
+   * Middleware 1: API key authentication (runs first).
+   * Accepts an Elnora API key from either `X-API-Key` or an
+   * `Authorization: Bearer elnora_live_...` header (see resolveApiKeyFromHeaders).
+   * If a key is present it is validated against the platform: valid → sets auth
+   * context and calls next(); invalid → 401. A bearer value that is NOT an API
+   * key (a real OAuth token) yields no key here and falls through to OAuth.
+   */
+  async function apiKeyAuthMiddleware(req: Request, res: Response, next: NextFunction): Promise<void> {
+    const token = resolveApiKeyFromHeaders(req.headers["x-api-key"], req.headers["authorization"]);
+
+    // codeql[js/user-controlled-bypass] Dual auth by design: both API key and OAuth paths
+    // validate credentials server-side. API key is validated by the platform's token endpoint;
+    // absence of an API key falls through to OAuth bearer token verification in ensureAuthenticated.
+    if (!token) {
+      next();
+      return;
+    }
+
+    // Validate against the platform (CoSAI MCP-T7)
+    const result = await validateApiKey(token, config, store);
+
+    if (!result) {
+      logAuthEvent("api_key_rejected", "unknown");
+      res.status(401).json({
+        error: "invalid_api_key",
+        error_description: "API key rejected by platform",
+      });
+      return;
+    }
+
+    // Use platform-assigned user ID as client identifier (no local hashing)
+    const apiKeyClientId = `apikey:${result.userId}`;
+
+    // Set auth context compatible with OAuth flow — use SDK's typed req.auth
+    // API key users get all scopes — platform enforces permissions
+    req.auth = {
+      token,
+      clientId: apiKeyClientId,
+      scopes: ALL_SCOPES,
+      extra: { isApiKeyAuth: true },
+    } satisfies AuthInfo;
+
+    logAuthEvent("api_key_authenticated", apiKeyClientId);
+    next();
+  }
+
+  /**
+   * Middleware 2: Ensure request is authenticated.
+   * If auth context was set by apiKeyAuthMiddleware, proceeds.
+   * Otherwise delegates to OAuth bearer token verification.
+   */
+  function ensureAuthenticated(req: Request, res: Response, next: NextFunction): void {
+    if (req.auth) {
+      // Already authenticated via API key
+      next();
+      return;
+    }
+    // Delegate to OAuth bearer token verification
+    oauthMiddleware(req, res, next);
+  }
+
+  // --- MCP Endpoint (protected by dual auth — rate limiting applied via app.use above) ---
+  app.post("/mcp", apiKeyAuthMiddleware, ensureAuthenticated, async (req: Request, res: Response) => {
+    let server: ReturnType<typeof createElnoraServer> | undefined;
+    let transport: StreamableHTTPServerTransport | undefined;
+    try {
+      const auth = req.auth;
+
+      const isApiKeyAuth = auth?.extra?.isApiKeyAuth === true;
+      const clientId = auth?.clientId || "unknown";
+      const scopes = auth?.scopes || [];
+
+      // Retrieve platform token via provider method (not via AuthInfo.extra — CoSAI MCP-T1)
+      const platformToken = !isApiKeyAuth && auth?.token ? await provider.getPlatformToken(auth.token) : undefined;
+
+      // Guard against empty/missing platform token
+      if (!isApiKeyAuth && !platformToken) {
+        res.status(401).json({ error: "invalid_token", error_description: "No platform token available" });
+        return;
+      }
+
+      // Create per-request API client — API key (from auth.token) or bearer token
+      const client = isApiKeyAuth
+        ? new ElnoraApiClient(config, { apiKey: auth!.token })
+        : new ElnoraApiClient(config, platformToken!);
+
+      const getContext = () => ({ client, clientId, scopes });
+      server = createElnoraServer(getContext);
+
+      // Stateless transport — new transport per request
+      transport = new StreamableHTTPServerTransport({
+        sessionIdGenerator: undefined,
+        enableJsonResponse: true,
+      });
+
+      res.on("close", () => {
+        transport?.close().catch(() => {});
+        server?.close().catch(() => {});
+      });
+      await server.connect(transport);
+      await transport.handleRequest(req, res, req.body);
+    } catch (error) {
+      transport?.close().catch(() => {});
+      server?.close().catch(() => {});
+      console.error("MCP request error:", error);
+      if (!res.headersSent) {
+        res.status(500).json({ error: "internal_error", error_description: "MCP request failed" });
+      }
+    }
+  });
+
+  // GET and DELETE on /mcp return 405 per MCP Streamable HTTP spec (stateless mode)
+  app.get("/mcp", (_req, res) => {
+    res.status(405).json({ error: "method_not_allowed", error_description: "Stateless server — use POST" });
+  });
+  app.delete("/mcp", (_req, res) => {
+    res.status(405).json({ error: "method_not_allowed", error_description: "Stateless server — sessions not supported" });
+  });
+
+  return app;
+}

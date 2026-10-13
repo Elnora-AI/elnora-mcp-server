@@ -92,8 +92,10 @@ On first connection, a browser window will open for OAuth login. Subsequent requ
 Most MCP clients handle OAuth automatically. On first connection:
 
 1. A browser window opens for login
-2. You authenticate with your Elnora account
-3. The client receives a token and uses it for subsequent requests
+2. If the application is a hosted (web) connector, a consent screen shows which application is
+   requesting access and where the authorization code will be delivered — review it and approve
+3. You authenticate with your Elnora account
+4. The client receives a token and uses it for subsequent requests
 
 No manual configuration needed.
 
