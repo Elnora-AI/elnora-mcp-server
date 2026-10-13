@@ -145,6 +145,10 @@ export function createApp(
       res.type("html").send(renderConsentErrorPage(message));
     };
 
+    // codeql[js/user-controlled-bypass] The consent decision (allow/deny) is the user's own choice and
+    // legitimately selects the branch. The sensitive action it leads to (grantConsent) independently
+    // verifies the __Host- browser-binding cookie server-side, so a forged `decision` value grants
+    // nothing — there is no credential check being bypassed here.
     if (decision !== "allow" && decision !== "deny") {
       logAuthEvent("consent_invalid_decision", "unknown");
       sendError("Invalid request. Please start the connection again.");

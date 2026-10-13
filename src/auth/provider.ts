@@ -176,9 +176,6 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
       res.cookie(authzBindingCookieName(this.config.publicUrl), browserBinding, bindingCookieOptions(this.config.publicUrl));
       res.setHeader("Content-Security-Policy", CONSENT_CSP);
       logAuthEvent("consent_screen_shown", client.client_id, { redirectHost: redirectHostForLog(params.redirectUri) });
-      // codeql[js/reflected-xss] renderConsentPage HTML-escapes every interpolated value (client name,
-      // redirect URI + host, scopes, mcp_code) via escapeHtml; the page carries no JavaScript and is
-      // served under a strict CSP (no script-src). No unescaped request data reaches this sink.
       res.type("html").send(html);
       return;
     }
