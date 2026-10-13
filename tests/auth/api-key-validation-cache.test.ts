@@ -21,6 +21,7 @@ const config: ElnoraConfig = {
   platformClientSecret: "s",
   mcpServiceKey: "svc",
   redisUrl: "redis://localhost:6379",
+  allowHostedClients: false,
 };
 
 describe("validateApiKey caching", () => {

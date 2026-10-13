@@ -10,8 +10,10 @@ import { CLIENT_SECRET_TTL_SECONDS } from "../constants.js";
  */
 export class InMemoryClientsStore implements OAuthRegisteredClientsStore {
   private clients = new Map<string, OAuthClientInformationFull>();
+  private allowHostedClients: boolean;
 
-  constructor() {
+  constructor(allowHostedClients = false) {
+    this.allowHostedClients = allowHostedClients;
     // Periodically evict expired clients to prevent unbounded memory growth
     setInterval(() => {
       const now = Math.floor(Date.now() / 1000);
@@ -45,13 +47,19 @@ export class InMemoryClientsStore implements OAuthRegisteredClientsStore {
         if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
           throw new Error(`redirect_uri must use HTTPS (got ${parsed.protocol}): ${uri}`);
         }
+        if (parsed.username || parsed.password) {
+          throw new Error(`redirect_uri must not contain userinfo: ${uri}`);
+        }
+        if (parsed.hash) {
+          throw new Error(`redirect_uri must not contain a fragment: ${uri}`);
+        }
         if (parsed.protocol === "http:" && !["localhost", "127.0.0.1"].includes(parsed.hostname)) {
           throw new Error(`HTTP redirect_uri only allowed for localhost: ${uri}`);
         }
-        // Hardening: only loopback redirect URIs may be registered via open Dynamic Client
-        // Registration. Non-loopback (hosted) clients are onboarded through explicit review rather
-        // than open self-registration. Loopback clients (CLI / local IDE integrations) are unaffected.
-        if (!["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname)) {
+        // Non-loopback (hosted) clients may self-register only when hosted clients are enabled; the
+        // consent screen then gates them at authorization time. With the flag off, open Dynamic Client
+        // Registration stays loopback-only. Loopback clients (CLI / local IDE) are always allowed.
+        if (!this.allowHostedClients && !["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname)) {
           throw new Error(`redirect_uri must be a loopback address (localhost, 127.0.0.1, or [::1]): ${uri}`);
         }
       }

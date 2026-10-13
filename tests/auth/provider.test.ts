@@ -24,6 +24,7 @@ const config: ElnoraConfig = {
   platformClientSecret: "secret",
   mcpServiceKey: "test-service-key",
   redisUrl: "redis://localhost:6379",
+  allowHostedClients: false,
 };
 
 describe("ElnoraOAuthProvider", () => {
@@ -252,7 +253,7 @@ describe("ElnoraOAuthProvider", () => {
       );
     });
 
-    it("rejects a non-loopback redirect_uri at authorize", async () => {
+    it("rejects a non-loopback redirect_uri at authorize when hosted clients are disabled", async () => {
       const client = { client_id: "test-client", redirect_uris: ["https://app.example.com/cb"] };
       const params = {
         codeChallenge: "challenge",
@@ -273,7 +274,7 @@ describe("ElnoraOAuthProvider", () => {
       );
     });
 
-    it("refuses to deliver the code to a non-loopback redirect (pre-existing client)", async () => {
+    it("refuses to deliver the code to a non-loopback redirect when hosted clients are disabled", async () => {
       const tokenStore = new InMemoryTokenStore();
       const clientsStore = new InMemoryClientsStore();
       const p = new ElnoraOAuthProvider(config, tokenStore, clientsStore);

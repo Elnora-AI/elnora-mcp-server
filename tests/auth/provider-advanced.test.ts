@@ -24,6 +24,7 @@ const config: ElnoraConfig = {
   platformClientSecret: "secret",
   mcpServiceKey: "test-service-key",
   redisUrl: "redis://localhost:6379",
+  allowHostedClients: false,
 };
 
 /** Helper: run the full authorize → callback → exchange flow to get tokens */

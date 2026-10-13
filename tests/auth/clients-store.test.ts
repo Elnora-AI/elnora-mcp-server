@@ -95,4 +95,40 @@ describe("InMemoryClientsStore", () => {
     const registered = store.registerClient({ redirect_uris: ["http://localhost:3000/callback"] });
     expect(registered.redirect_uris).toEqual(["http://localhost:3000/callback"]);
   });
+
+  it("rejects a redirect_uri containing userinfo", () => {
+    const store = new InMemoryClientsStore();
+    expect(() => store.registerClient({ redirect_uris: ["https://user:pass@localhost/cb"] })).toThrow(
+      "must not contain userinfo",
+    );
+  });
+
+  it("rejects a redirect_uri containing a fragment", () => {
+    const store = new InMemoryClientsStore();
+    expect(() => store.registerClient({ redirect_uris: ["http://localhost:3000/cb#frag"] })).toThrow(
+      "must not contain a fragment",
+    );
+  });
+
+  describe("when hosted clients are enabled", () => {
+    it("accepts a non-loopback HTTPS redirect URI", () => {
+      const store = new InMemoryClientsStore(true);
+      const registered = store.registerClient({ redirect_uris: ["https://claude.ai/api/mcp/auth_callback"] });
+      expect(registered.redirect_uris).toEqual(["https://claude.ai/api/mcp/auth_callback"]);
+    });
+
+    it("still rejects a non-localhost HTTP redirect URI", () => {
+      const store = new InMemoryClientsStore(true);
+      expect(() => store.registerClient({ redirect_uris: ["http://evil.example.com/cb"] })).toThrow(
+        "HTTP redirect_uri only allowed for localhost",
+      );
+    });
+
+    it("still rejects userinfo in a redirect URI", () => {
+      const store = new InMemoryClientsStore(true);
+      expect(() => store.registerClient({ redirect_uris: ["https://user:pass@claude.ai/cb"] })).toThrow(
+        "must not contain userinfo",
+      );
+    });
+  });
 });

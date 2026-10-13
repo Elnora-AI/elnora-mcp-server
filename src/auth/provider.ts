@@ -11,15 +11,18 @@ import {
 import { AuthInfo } from "@modelcontextprotocol/sdk/server/auth/types.js";
 import { InvalidTokenError, ServerError } from "@modelcontextprotocol/sdk/server/auth/errors.js";
 import { TokenStore } from "./token-store.js";
-import { ElnoraConfig, TokenRecord } from "../types.js";
+import { ElnoraConfig, TokenRecord, AuthorizationSession } from "../types.js";
 import { logAuthEvent } from "../middleware/tool-logging.js";
 import { authzBindingCookieName, newBindingValue, bindingCookieOptions, safeBindingEqual } from "./authz-binding.js";
+import { renderConsentPage, CONSENT_CSP } from "./consent-page.js";
 import {
   ACCESS_TOKEN_TTL_SECONDS,
   REFRESH_TOKEN_TTL_SECONDS,
   AUTH_CODE_TTL_SECONDS,
+  CONSENT_SESSION_TTL_SECONDS,
   REQUEST_TIMEOUT_MS,
   SUPPORTED_SCOPES,
+  HOSTED_CLIENT_ALLOWED_SCOPES,
 } from "../constants.js";
 
 /**
@@ -65,6 +68,23 @@ function isLoopbackRedirectUri(uri: string | undefined): boolean {
   }
 }
 
+/**
+ * Strip control characters and cap length before an untrusted value (a client-supplied redirect URI)
+ * is placed in a log line, matching the callback error path in app.ts. Prevents log injection.
+ */
+function sanitizeForLog(value: string): string {
+  return value.replace(/[\x00-\x1f\x7f]/g, "").slice(0, 200);
+}
+
+/** Host of a redirect URI for logging — URL.host is ASCII (punycode) and cannot carry control chars. */
+function redirectHostForLog(uri: string): string {
+  try {
+    return new URL(uri).host;
+  } catch {
+    return "invalid";
+  }
+}
+
 export class ElnoraOAuthProvider implements OAuthServerProvider {
   private _clientsStore: OAuthRegisteredClientsStore;
   private store: TokenStore;
@@ -98,16 +118,6 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
       throw new Error("PKCE code_challenge is required");
     }
 
-    // Only loopback redirect URIs are honoured (aligned with registration hardening); this also blocks
-    // a client registered before that restriction from receiving the code at a non-loopback host.
-    if (!isLoopbackRedirectUri(params.redirectUri)) {
-      logAuthEvent("redirect_uri_rejected_non_loopback", client.client_id);
-      throw new Error("redirect_uri must be a loopback address");
-    }
-
-    // Generate a random state token for the platform callback (CSRF protection)
-    const platformState = crypto.randomBytes(16).toString("base64url");
-
     // Validate requested scopes against supported scopes — reject unsupported scopes early
     const requestedScopes = params.scopes || [];
     const supportedSet = new Set<string>(SUPPORTED_SCOPES);
@@ -116,11 +126,61 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
       throw new Error(`Unsupported scopes requested: ${unsupported.join(", ")}`);
     }
 
+    // Generate a random state token for the platform callback (CSRF protection)
+    const platformState = crypto.randomBytes(16).toString("base64url");
+
     // One-time value bound to the initiating user agent (RFC 9700): stored on the session and
-    // set as a host-locked cookie below; the callback must present a cookie that matches it.
+    // set as a host-locked cookie; the callback must present a cookie that matches it.
     const browserBinding = newBindingValue();
 
-    // Store session for later exchange
+    const loopback = isLoopbackRedirectUri(params.redirectUri);
+
+    // --- Non-loopback (hosted) clients: feature-flagged, scope-capped, and consent-gated ---
+    if (!loopback) {
+      if (!this.config.allowHostedClients) {
+        logAuthEvent("redirect_uri_rejected_non_loopback", client.client_id, { redirectUri: sanitizeForLog(params.redirectUri) });
+        throw new Error("redirect_uri must be a loopback address");
+      }
+
+      // A hosted client may only receive read-only scopes today. Downscope to the allowed subset
+      // (standard OAuth: an authorization server MAY grant fewer scopes than requested).
+      const grantedScopes = requestedScopes.filter((s) => HOSTED_CLIENT_ALLOWED_SCOPES.has(s));
+      if (grantedScopes.length === 0) {
+        logAuthEvent("hosted_scopes_rejected", client.client_id);
+        throw new Error("None of the requested scopes are available to hosted clients");
+      }
+
+      // Session starts unconsented — the callback refuses to deliver a code until Allow flips this.
+      await this.store.setSession(authCode, {
+        clientId: client.client_id,
+        codeChallenge: params.codeChallenge,
+        redirectUri: params.redirectUri,
+        scopes: grantedScopes,
+        state: params.state,
+        resource: params.resource?.toString(),
+        platformState,
+        browserBinding,
+        consented: false,
+        createdAt: Date.now(),
+      }, CONSENT_SESSION_TTL_SECONDS);
+
+      // Build the (pure) HTML string first: a failure here is caught by the SDK and turned into a
+      // clean error redirect before any header is written. Only then mutate the response — set the
+      // binding cookie + CSP and send the body as the final statements (no further await/throw).
+      const html = renderConsentPage({
+        clientName: client.client_name,
+        redirectUri: params.redirectUri,
+        scopes: grantedScopes,
+        mcpCode: authCode,
+      });
+      res.cookie(authzBindingCookieName(this.config.publicUrl), browserBinding, bindingCookieOptions(this.config.publicUrl));
+      res.setHeader("Content-Security-Policy", CONSENT_CSP);
+      logAuthEvent("consent_screen_shown", client.client_id, { redirectHost: redirectHostForLog(params.redirectUri) });
+      res.type("html").send(html);
+      return;
+    }
+
+    // --- Loopback clients (CLI / local IDE): unchanged — no consent screen, straight to login ---
     await this.store.setSession(authCode, {
       clientId: client.client_id,
       codeChallenge: params.codeChallenge,
@@ -130,22 +190,82 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
       resource: params.resource?.toString(),
       platformState,
       browserBinding,
+      consented: true,
       createdAt: Date.now(),
     }, AUTH_CODE_TTL_SECONDS);
-
-    // Redirect to Elnora platform login
-    const loginUrl = new URL(this.config.loginUrl);
-    loginUrl.searchParams.set("mcp_code", authCode);
-    loginUrl.searchParams.set("redirect_uri", `${this.config.publicUrl}/oauth/callback`);
-    loginUrl.searchParams.set("client_id", this.config.platformClientId);
-    loginUrl.searchParams.set("state", platformState);
 
     // Bind the request to this user agent — the callback requires this cookie to match (RFC 9700).
     // Set before redirect so the Set-Cookie is carried on the 302.
     res.cookie(authzBindingCookieName(this.config.publicUrl), browserBinding, bindingCookieOptions(this.config.publicUrl));
 
     logAuthEvent("authorize_redirect", client.client_id);
-    res.redirect(loginUrl.toString());
+    res.redirect(this.buildPlatformLoginUrl(authCode, platformState));
+  }
+
+  /** Build the Elnora platform login URL that carries the MCP code forward (shared by both paths). */
+  private buildPlatformLoginUrl(authCode: string, platformState: string): string {
+    const loginUrl = new URL(this.config.loginUrl);
+    loginUrl.searchParams.set("mcp_code", authCode);
+    loginUrl.searchParams.set("redirect_uri", `${this.config.publicUrl}/oauth/callback`);
+    loginUrl.searchParams.set("client_id", this.config.platformClientId);
+    loginUrl.searchParams.set("state", platformState);
+    return loginUrl.toString();
+  }
+
+  /**
+   * Load a pending consent session and verify the one-time browser binding (the same user agent that
+   * began /authorize). Fails closed on an absent, duplicate (null), or mismatched cookie. Shared by the
+   * Allow and Deny handlers so both enforce the identical same-user-agent gate.
+   */
+  private async loadConsentSession(mcpCode: string, browserBinding?: string | null): Promise<AuthorizationSession> {
+    const session = await this.store.getSession(mcpCode);
+    if (!session) {
+      throw new Error("Invalid or expired authorization session");
+    }
+    if (!safeBindingEqual(browserBinding, session.browserBinding)) {
+      logAuthEvent("consent_binding_failed", session.clientId);
+      throw new Error("Authorization session could not be verified");
+    }
+    return session;
+  }
+
+  /**
+   * Record consent (Allow) for a pending non-loopback authorization and return the platform login URL.
+   * Requires the one-time browser binding set at /authorize (same user agent) and rejects a replayed
+   * or already-completed flow. Throws on any failure; the HTTP layer renders a generic error page.
+   * The binding cookie is NOT cleared here — it is still required when the callback lands.
+   */
+  async grantConsent(mcpCode: string, browserBinding?: string | null): Promise<string> {
+    const session = await this.loadConsentSession(mcpCode, browserBinding);
+    // platformCode is only ever set on the callback; its presence means this flow already completed.
+    if (session.platformCode !== undefined) {
+      throw new Error("Authorization already processed");
+    }
+    await this.store.updateSession(mcpCode, { consented: true });
+    logAuthEvent("consent_granted", session.clientId, { redirectHost: redirectHostForLog(session.redirectUri) });
+    return this.buildPlatformLoginUrl(mcpCode, session.platformState);
+  }
+
+  /**
+   * Record a denial (Deny) and return the client's registered redirect URI carrying an OAuth
+   * access_denied error. Requires the browser binding so an attacker cannot abort someone else's flow.
+   * The session is consumed. The redirect URI is the one validated at /authorize, so it is safe.
+   */
+  async denyConsent(mcpCode: string, browserBinding?: string | null): Promise<string> {
+    const session = await this.loadConsentSession(mcpCode, browserBinding);
+    // A completed flow has already delivered its code — nothing left to deny (parity with grantConsent).
+    if (session.platformCode !== undefined) {
+      throw new Error("Authorization already processed");
+    }
+    const redirectUrl = new URL(session.redirectUri);
+    redirectUrl.searchParams.set("error", "access_denied");
+    redirectUrl.searchParams.set("error_description", "The user denied the authorization request");
+    if (session.state) {
+      redirectUrl.searchParams.set("state", session.state);
+    }
+    await this.store.deleteSession(mcpCode);
+    logAuthEvent("consent_denied", session.clientId, { redirectHost: redirectHostForLog(session.redirectUri) });
+    return redirectUrl.toString();
   }
 
   async challengeForAuthorizationCode(
@@ -453,11 +573,15 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
       throw new Error("Redirect URI not registered for client");
     }
 
-    // Deliver the authorization code only to a loopback redirect URI (aligned with registration
-    // hardening) — a registered non-loopback client must not receive the code.
+    // Deliver to a non-loopback redirect only when hosted clients are enabled AND the user approved
+    // this client on the consent screen. Loopback redirects are always permitted (no consent screen,
+    // consented set true at /authorize). This also fails closed for any non-loopback session created
+    // during an "allow hosted" window whose callback lands after the flag has been turned off.
     if (!isLoopbackRedirectUri(session.redirectUri)) {
-      logAuthEvent("redirect_uri_rejected_non_loopback", session.clientId, { redirectUri: session.redirectUri });
-      throw new Error("Redirect URI not permitted");
+      if (!this.config.allowHostedClients || session.consented !== true) {
+        logAuthEvent("redirect_uri_rejected_non_loopback", session.clientId, { redirectUri: sanitizeForLog(session.redirectUri) });
+        throw new Error("Redirect URI not permitted");
+      }
     }
 
     // All validations passed — bind the platform code to the session (single mutation, performed last).

@@ -16,6 +16,13 @@ export interface ElnoraConfig {
   mcpServiceKey: string;
   /** Redis connection URL (e.g. redis://localhost:6379 or rediss://... for TLS) */
   redisUrl: string;
+  /**
+   * When true, non-loopback (hosted) OAuth clients may register and, after passing the per-client
+   * consent screen, complete the authorization flow. When false (default) only loopback clients are
+   * allowed, everywhere — the pre-consent containment behaviour. Sourced from
+   * ELNORA_MCP_ALLOW_HOSTED_CLIENTS.
+   */
+  allowHostedClients: boolean;
 }
 
 /** Stored authorization session for PKCE flow */
@@ -31,6 +38,13 @@ export interface AuthorizationSession {
   platformState: string;
   /** One-time value bound to the initiating user agent via a cookie — verified on callback (RFC 9700) */
   browserBinding: string;
+  /**
+   * Whether the user has approved this client on the consent screen. Loopback clients are set true at
+   * /authorize (no screen). Non-loopback clients start false and are flipped to true only by an
+   * explicit Allow. The callback refuses to deliver a code to a non-loopback redirect unless this is
+   * true. Absent (undefined) on pre-consent sessions and treated as "not consented" for non-loopback.
+   */
+  consented?: boolean;
   createdAt: number;
 }
 
