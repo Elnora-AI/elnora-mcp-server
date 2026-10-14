@@ -110,6 +110,15 @@ describe("hosted-client consent flow", () => {
       expect(session?.scopes).toEqual(["tasks:read"]);
     });
 
+    it("drops projects:read (projects were removed from the platform) from a hosted grant", async () => {
+      const client = await registerHostedClient(clientsStore);
+      const { res, calls } = makeConsentRes();
+      await provider.authorize(client, { codeChallenge: "c", redirectUri: HOSTED_REDIRECT, scopes: ["tasks:read", "projects:read"] } as never, res);
+      const session = await store.getSession(extractMcpCode(calls.html!));
+      expect(session?.scopes).toEqual(["tasks:read"]);
+      expect(calls.html).not.toContain("View your projects");
+    });
+
     it("rejects a hosted client that requests only write/unavailable scopes", async () => {
       const client = await registerHostedClient(clientsStore);
       const { res } = makeConsentRes();

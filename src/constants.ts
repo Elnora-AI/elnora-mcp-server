@@ -89,12 +89,14 @@ export const SENSITIVE_SCOPES: ReadonlySet<string> = new Set(
  * able to request mutation, or to read security-sensitive data (API-key inventory, the audit log),
  * that a mis-click could grant. Scopes requested beyond this set are dropped, never escalated. A
  * richer per-client registration cap is a planned follow-up; widening this set is a one-line change.
+ *
+ * projects:read is intentionally excluded: the platform removed the "project" concept, so every
+ * projects tool is a no-op and the consent screen must not offer "View your projects".
  */
 export const HOSTED_CLIENT_ALLOWED_SCOPES: ReadonlySet<string> = new Set([
   "tasks:read",
   "files:read",
   "messages:read",
-  "projects:read",
   "search:read",
   "orgs:read",
   "folders:read",
