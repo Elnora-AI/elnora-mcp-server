@@ -5,6 +5,13 @@ All notable changes to the Elnora MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.8.0](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v1.7.14...mcp-server-v1.8.0) (2026-10-14)
+
+
+### Features
+
+* **auth:** add MCP-server consent screen for hosted OAuth clients ([#381](https://github.com/Elnora-AI/elnora-mcp-server/issues/381)) ([8735e87](https://github.com/Elnora-AI/elnora-mcp-server/commit/8735e8719a8504ea260ffb05f36764356534ec10))
+
 ## [1.7.14](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v1.7.13...mcp-server-v1.7.14) (2026-10-08)
 
 
