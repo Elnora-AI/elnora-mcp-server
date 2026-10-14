@@ -13,7 +13,7 @@ env:
   AWS_REGION: us-east-1
   AWS_ECR_REGISTRY: 551507900153.dkr.ecr.us-east-1.amazonaws.com
   AWS_CLUSTER: production
-  AWS_ROLE_ARN: arn:aws:iam::551507900153:role/elnora-github-actions-deploy
+  AWS_ROLE_ARN: arn:aws:iam::551507900153:role/elnora-github-actions-deploy-mcp
 
 jobs:
   deploy:
