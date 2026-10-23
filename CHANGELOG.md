@@ -5,6 +5,14 @@ All notable changes to the Elnora MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.8.3](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v1.8.2...mcp-server-v1.8.3) (2026-10-23)
+
+
+### Bug Fixes
+
+* **docker:** bump base image to node 26.12.1 ([#403](https://github.com/Elnora-AI/elnora-mcp-server/issues/403)) ([c3926a7](https://github.com/Elnora-AI/elnora-mcp-server/commit/c3926a7658842cce54efcb9ea5047714ce096a07))
+* harden outbound redirect handling and IPv6 rate limiting ([#401](https://github.com/Elnora-AI/elnora-mcp-server/issues/401)) ([55b44e8](https://github.com/Elnora-AI/elnora-mcp-server/commit/55b44e8a5d4a29aace92b8b693aa46cb2aa13370))
+
 ## [1.8.2](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v1.8.1...mcp-server-v1.8.2) (2026-10-23)
 
 
