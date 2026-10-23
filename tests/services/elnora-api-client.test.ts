@@ -59,6 +59,26 @@ describe("ElnoraApiClient", () => {
     });
   });
 
+  describe("redirects", () => {
+    function beforeRedirect(): (options: Record<string, unknown>) => void {
+      new ElnoraApiClient({ apiUrl: "https://platform.elnora.ai/api/v1" }, { apiKey: "elnora_live_abc123xyz" });
+      return vi.mocked(axios.create).mock.calls[0][0]?.beforeRedirect as (options: Record<string, unknown>) => void;
+    }
+
+    it("follows a redirect within the same origin", () => {
+      expect(() => beforeRedirect()({ href: "https://platform.elnora.ai/api/v1/other" })).not.toThrow();
+    });
+
+    it.each([
+      ["a downgrade to http", "http://platform.elnora.ai/api/v1/other"],
+      ["another port", "https://platform.elnora.ai:8443/api/v1/other"],
+      ["a local address", "http://localhost:5265/api/v1/other"],
+      ["another host", "https://example.com/api/v1/other"],
+    ])("blocks %s", (_label, href) => {
+      expect(() => beforeRedirect()({ href })).toThrow(/Blocked redirect/);
+    });
+  });
+
   describe("get", () => {
     it("calls axios get with path and cleaned params", async () => {
       mockGet.mockResolvedValueOnce({ data: { tasks: [] } });

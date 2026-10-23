@@ -57,7 +57,7 @@ export async function validateApiKey(
     const validation = await axios.post(
       config.tokenValidationUrl,
       { token },
-      { timeout: 10_000, headers: { "X-Service-Key": config.mcpServiceKey } },
+      { timeout: 10_000, headers: { "X-Service-Key": config.mcpServiceKey }, maxRedirects: 0 }, // never resend credentials to a redirect target
     );
     // Platform response may use camelCase (.NET default) or snake_case.
     const userId = validation.data.user_id ?? validation.data.userId;
