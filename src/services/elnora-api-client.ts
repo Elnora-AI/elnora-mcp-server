@@ -55,8 +55,8 @@ export class ElnoraApiClient {
       maxRedirects: 3,
       beforeRedirect: (options: Record<string, unknown>) => {
         const redirectUrl = new URL(options.href as string);
-        if (!ALLOWED_HOSTNAMES.has(redirectUrl.hostname) && !DEV_HOSTNAMES.has(redirectUrl.hostname)) {
-          throw new Error(`Blocked redirect to untrusted host: ${redirectUrl.hostname}`);
+        if (redirectUrl.origin !== this.originUrl) {
+          throw new Error(`Blocked redirect to untrusted origin: ${redirectUrl.origin}`);
         }
       },
     });
