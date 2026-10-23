@@ -5,7 +5,7 @@ import { requireBearerAuth } from "@modelcontextprotocol/sdk/server/auth/middlew
 import { AuthInfo } from "@modelcontextprotocol/sdk/server/auth/types.js";
 import { OAuthRegisteredClientsStore } from "@modelcontextprotocol/sdk/server/auth/clients.js";
 import express, { Request, Response, NextFunction } from "express";
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { ElnoraConfig } from "./types.js";
 import { ElnoraApiClient } from "./services/elnora-api-client.js";
 import { ElnoraOAuthProvider } from "./auth/provider.js";
@@ -200,9 +200,9 @@ export function createApp(
       if (apiKeyHeader) return `key:${bucketHash(String(apiKeyHeader))}`;
       const ip = req.ip || req.socket.remoteAddress;
       if (!ip) return `ip:unresolved:${crypto.randomUUID()}`;
-      // Normalize IPv6-mapped IPv4 (e.g. ::ffff:127.0.0.1 → 127.0.0.1)
-      const normalized = ip.startsWith("::ffff:") ? ip.slice(7) : ip;
-      return `ip:${normalized}`;
+      // Maps IPv4-mapped IPv6 (::ffff:127.0.0.1) to IPv4 and keys other IPv6 addresses by their /56
+      // network, so a client cannot get a fresh limit by rotating addresses within its own prefix.
+      return `ip:${ipKeyGenerator(ip)}`;
     },
     message: { error: "rate_limit_exceeded", error_description: "Too many requests. Please retry later." },
   }));

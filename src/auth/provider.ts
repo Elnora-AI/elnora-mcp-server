@@ -324,7 +324,7 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
           client_id: this.config.platformClientId,
           client_secret: this.config.platformClientSecret,
         },
-        { timeout: REQUEST_TIMEOUT_MS },
+        { timeout: REQUEST_TIMEOUT_MS, maxRedirects: 0 }, // never resend credentials to a redirect target
       );
       platformToken = response.data.access_token;
       platformRefreshToken = response.data.refresh_token;
@@ -373,7 +373,7 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
       const validation = await axios.post(
         this.config.tokenValidationUrl,
         { token: record.platformToken },
-        { timeout: REQUEST_TIMEOUT_MS, headers: this.validationHeaders },
+        { timeout: REQUEST_TIMEOUT_MS, headers: this.validationHeaders, maxRedirects: 0 }, // never resend credentials to a redirect target
       );
       if (!validation.data.valid) {
         await this.store.deleteTokenRecord(accessTokenKey);
@@ -448,7 +448,7 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
       const validation = await axios.post(
         this.config.tokenValidationUrl,
         { token: record.platformToken },
-        { timeout: REQUEST_TIMEOUT_MS, headers: this.validationHeaders },
+        { timeout: REQUEST_TIMEOUT_MS, headers: this.validationHeaders, maxRedirects: 0 }, // never resend credentials to a redirect target
       );
       if (!validation.data.valid) {
         return this.attemptRefreshOrRevoke(token, record);
@@ -646,7 +646,7 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
           client_id: this.config.platformClientId,
           client_secret: this.config.platformClientSecret,
         },
-        { timeout: REQUEST_TIMEOUT_MS },
+        { timeout: REQUEST_TIMEOUT_MS, maxRedirects: 0 }, // never resend credentials to a redirect target
       );
       return {
         accessToken: response.data.access_token,
