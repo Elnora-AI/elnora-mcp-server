@@ -60,7 +60,7 @@
     "hono": "^4.13.5",
     "postcss": ">=8.5.26",
     "@hono/node-server": "^2.0.5",
-    "follow-redirects": ">=1.16.0",
+    "follow-redirects": ">=1.16.1",
     "tar": "^7.5.11",
     "minimatch": "^10.2.4",
     "path-to-regexp": "^8.4.0",
