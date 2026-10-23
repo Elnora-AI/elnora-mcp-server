@@ -21,7 +21,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
-          node-version: 24
+          node-version-file: .nvmrc
           cache: npm
       - run: npm ci
       - run: npm run build
@@ -33,6 +33,13 @@ jobs:
         run: |
           docker run --rm --entrypoint node mcp-server:ci \
             -p "process.versions.node + ' / openssl ' + process.versions.openssl"
+          # CI, deploy and publish take Node from .nvmrc; fail if it and the Dockerfile disagree on the major.
+          IMAGE_MAJOR=$(docker run --rm --entrypoint node mcp-server:ci -p "process.versions.node.split('.')[0]")
+          CI_MAJOR=$(node -p "process.versions.node.split('.')[0]")
+          if [ "$IMAGE_MAJOR" != "$CI_MAJOR" ]; then
+            echo "::error::The Dockerfile uses Node $IMAGE_MAJOR but .nvmrc (CI, deploy, publish) uses Node $CI_MAJOR"
+            exit 1
+          fi
       - name: Generate SBOM (CoSAI MCP-T11)
         run: npm sbom --sbom-format cyclonedx > sbom.json || echo '{"bomFormat":"CycloneDX","specVersion":"1.4","components":[]}' > sbom.json
       - name: Upload SBOM artifact
