@@ -5,6 +5,13 @@ All notable changes to the Elnora MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.8.4](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v1.8.3...mcp-server-v1.8.4) (2026-10-24)
+
+
+### Bug Fixes
+
+* **deps:** bump body-parser to 2.4.0 and fast-uri to 4.2.3 ([#405](https://github.com/Elnora-AI/elnora-mcp-server/issues/405)) ([6df415e](https://github.com/Elnora-AI/elnora-mcp-server/commit/6df415ebeb51a258bdd2bcea23d7c833152b0616))
+
 ## [1.8.3](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v1.8.2...mcp-server-v1.8.3) (2026-10-23)
 
 
