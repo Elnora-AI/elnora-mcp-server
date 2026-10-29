@@ -7,6 +7,7 @@ import { createApp } from "../../src/app.js";
 import { InMemoryTokenStore } from "../../src/auth/in-memory-token-store.js";
 import { InMemoryClientsStore } from "../../src/auth/clients-store.js";
 import type { ElnoraConfig } from "../../src/types.js";
+import { httpError, networkError, rejectedRefresh } from "../helpers/fake-platform.js";
 
 /**
  * POST /token error responses (RFC 6749 §5.2). A refresh token or authorization code that is unknown,
@@ -80,10 +81,10 @@ async function captureAuthEvents(fn: () => Promise<unknown>): Promise<Array<Reco
   }
 }
 
-/** An axios error carrying an HTTP response, as axios throws for a non-2xx status. */
-function httpError(status: number): Error {
-  return Object.assign(new Error(`Request failed with status code ${status}`), { isAxiosError: true, response: { status, data: {} } });
-}
+/** The platform renewing its token pair (refresh_token grant). */
+const platformRenewal = {
+  data: { access_token: "renewed-platform-token", refresh_token: "renewed-platform-refresh-token", expires_in: 3600 },
+};
 
 async function postToken(params: Record<string, string>): Promise<{ status: number; body: Record<string, unknown> }> {
   const res = await fetch(`${baseUrl}/token`, {
@@ -142,12 +143,28 @@ describe("POST /token — refresh_token grant errors", () => {
     expect({ status, error: body.error }).toEqual({ status: 400, error: "invalid_grant" });
   });
 
-  it("rejects a refresh whose platform token is revoked with 400 invalid_grant, and the grant stays dead", async () => {
+  it("renews the platform token pair on every refresh", async () => {
     const refreshToken = await seedRefreshToken();
-    vi.spyOn(axios, "post").mockResolvedValueOnce({ data: { valid: false } });
+    platformPost.mockResolvedValueOnce(platformRenewal);
+    const first = await postToken({ grant_type: "refresh_token", refresh_token: refreshToken });
+    expect(first.status).toBe(200);
+
+    platformPost.mockResolvedValueOnce(platformRenewal);
+    const second = await postToken({ grant_type: "refresh_token", refresh_token: first.body.refresh_token as string });
+    expect(second.status).toBe(200);
+    expect(platformPost.mock.calls.map(([url, body]) => [url, (body as Record<string, unknown>).refresh_token])).toEqual([
+      [config.tokenExchangeUrl, "platform-refresh-token"],
+      [config.tokenExchangeUrl, "renewed-platform-refresh-token"],
+    ]);
+  });
+
+  it("rejects a refresh the platform no longer accepts with 400 invalid_grant, and the grant stays dead", async () => {
+    const refreshToken = await seedRefreshToken();
+    platformPost.mockRejectedValueOnce(rejectedRefresh("Refresh token has expired."));
 
     const first = await postToken({ grant_type: "refresh_token", refresh_token: refreshToken });
     expect({ status: first.status, error: first.body.error }).toEqual({ status: 400, error: "invalid_grant" });
+    expect(first.body.error_description).not.toContain("expired");
 
     const retry = await postToken({ grant_type: "refresh_token", refresh_token: refreshToken });
     expect({ status: retry.status, error: retry.body.error }).toEqual({ status: 400, error: "invalid_grant" });
@@ -178,12 +195,12 @@ describe("POST /token — refresh_token grant errors", () => {
 
   it("keeps a transient platform outage a retryable 500 server_error without destroying the grant", async () => {
     const refreshToken = await seedRefreshToken();
-    vi.spyOn(axios, "post").mockRejectedValueOnce(new Error("ECONNREFUSED"));
+    platformPost.mockRejectedValueOnce(new Error("ECONNREFUSED"));
 
     const outage = await postToken({ grant_type: "refresh_token", refresh_token: refreshToken });
     expect({ status: outage.status, error: outage.body.error }).toEqual({ status: 500, error: "server_error" });
 
-    vi.spyOn(axios, "post").mockResolvedValueOnce({ data: { valid: true } });
+    platformPost.mockResolvedValueOnce(platformRenewal);
     const retry = await postToken({ grant_type: "refresh_token", refresh_token: refreshToken });
     expect(retry.status).toBe(200);
     expect(retry.body.refresh_token).toEqual(expect.any(String));
@@ -196,7 +213,7 @@ describe("POST /token — refresh_token grant errors", () => {
     const refused = await postToken({ grant_type: "refresh_token", refresh_token: refreshToken });
     expect({ status: refused.status, error: refused.body.error }).toEqual({ status: 500, error: "server_error" });
 
-    platformPost.mockResolvedValueOnce({ data: { valid: true } });
+    platformPost.mockResolvedValueOnce(platformRenewal);
     const retry = await postToken({ grant_type: "refresh_token", refresh_token: refreshToken });
     expect(retry.status).toBe(200);
   });
@@ -236,9 +253,47 @@ describe("POST /token — authorization_code grant errors", () => {
     expect({ status, error: body.error }).toEqual({ status: 400, error: "invalid_grant" });
   });
 
+  it("keeps a platform outage during the code exchange a retryable 500 server_error", async () => {
+    const code = await seedAuthCode({ platformCode: "platform-code" });
+    platformPost.mockRejectedValueOnce(networkError());
+    const { status, body } = await postToken({ grant_type: "authorization_code", code, code_verifier: CODE_VERIFIER, redirect_uri: REDIRECT });
+    expect({ status, error: body.error }).toEqual({ status: 500, error: "server_error" });
+  });
+
   it("rejects a code whose platform login never completed with 400 invalid_grant", async () => {
     const code = await seedAuthCode();
     const { status, body } = await postToken({ grant_type: "authorization_code", code, code_verifier: CODE_VERIFIER, redirect_uri: REDIRECT });
     expect({ status, error: body.error }).toEqual({ status: 400, error: "invalid_grant" });
+  });
+});
+
+describe("/mcp with an expired access token", () => {
+  it("answers 401 with a WWW-Authenticate challenge, and the grant's refresh token still works", async () => {
+    const accessToken = crypto.randomBytes(32).toString("base64url");
+    const refreshToken = crypto.randomBytes(32).toString("base64url");
+    const now = Math.floor(Date.now() / 1000);
+    await store.setTokenRecord(accessToken, {
+      accessToken,
+      refreshToken,
+      platformToken: "platform-token",
+      platformRefreshToken: "platform-refresh-token",
+      clientId,
+      scopes: ["tasks:read"],
+      expiresAt: now - 60,
+      createdAt: now - 3600,
+    }, 30 * 24 * 3600);
+    await store.setRefreshIndex(refreshToken, accessToken, 30 * 24 * 3600);
+
+    const res = await fetch(`${baseUrl}/mcp`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json", Accept: "application/json, text/event-stream" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
+    });
+    expect(res.status).toBe(401);
+    expect(res.headers.get("www-authenticate")).toMatch(/^Bearer [\x20-\x7e]*error="invalid_token"/);
+
+    platformPost.mockResolvedValueOnce(platformRenewal);
+    const refreshed = await postToken({ grant_type: "refresh_token", refresh_token: refreshToken });
+    expect(refreshed.status).toBe(200);
   });
 });

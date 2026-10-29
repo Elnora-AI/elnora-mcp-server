@@ -3,6 +3,7 @@ import { ElnoraOAuthProvider } from "../../src/auth/provider.js";
 import { InMemoryTokenStore } from "../../src/auth/in-memory-token-store.js";
 import { InMemoryClientsStore } from "../../src/auth/clients-store.js";
 import type { ElnoraConfig } from "../../src/types.js";
+import { httpError, rejectedRefresh } from "../helpers/fake-platform.js";
 
 vi.mock("axios", () => ({
   default: {
@@ -12,6 +13,11 @@ vi.mock("axios", () => ({
 }));
 
 import axios from "axios";
+
+/** The platform renewing its token pair (refresh_token grant). */
+const platformRenewal = {
+  data: { access_token: "platform-token-456", refresh_token: "platform-refresh-token-456", expires_in: 3600 },
+};
 
 const config: ElnoraConfig = {
   apiUrl: "https://api.example.com",
@@ -64,6 +70,7 @@ describe("ElnoraOAuthProvider — advanced flows", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(axios.post).mockReset();
     provider = new ElnoraOAuthProvider(config, new InMemoryTokenStore(), new InMemoryClientsStore());
   });
 
@@ -85,12 +92,13 @@ describe("ElnoraOAuthProvider — advanced flows", () => {
       expect(await provider.getPlatformToken(tokens.access_token)).toBe("platform-token-123");
     });
 
-    it("revokes token when platform returns { valid: false }", async () => {
+    it("revokes token when platform returns { valid: false } and refuses to renew it", async () => {
       const { tokens } = await issueTokens(provider);
 
       vi.mocked(axios.post).mockResolvedValueOnce({
         data: { valid: false },
       });
+      vi.mocked(axios.post).mockRejectedValueOnce(rejectedRefresh("Refresh token has expired."));
 
       await expect(provider.verifyAccessToken(tokens.access_token)).rejects.toThrow(
         "Underlying platform token revoked",
@@ -102,17 +110,19 @@ describe("ElnoraOAuthProvider — advanced flows", () => {
       );
     });
 
-    it("revokes token when platform returns 401", async () => {
+    it("fails closed without revoking when validation returns 401 (this server's credentials refused)", async () => {
       const { tokens } = await issueTokens(provider);
 
-      const axiosError = new Error("Unauthorized") as Error & { response: { status: number } };
-      (axiosError as Record<string, unknown>).response = { status: 401 };
-      (axiosError as Record<string, unknown>).isAxiosError = true;
-      vi.mocked(axios.post).mockRejectedValueOnce(axiosError);
+      vi.mocked(axios.post).mockRejectedValueOnce(httpError(401));
 
       await expect(provider.verifyAccessToken(tokens.access_token)).rejects.toThrow(
-        "Underlying platform token revoked",
+        "Platform token validation unavailable",
       );
+
+      // The grant survives
+      vi.mocked(axios.post).mockResolvedValueOnce({ data: { valid: true } });
+      const authInfo = await provider.verifyAccessToken(tokens.access_token);
+      expect(authInfo.token).toBe(tokens.access_token);
     });
 
     it("rejects on network error (fail-closed for security)", async () => {
@@ -165,8 +175,8 @@ describe("ElnoraOAuthProvider — advanced flows", () => {
     it("issues new tokens and rotates the old ones", async () => {
       const { tokens, client } = await issueTokens(provider);
 
-      // Mock platform token re-validation during refresh
-      vi.mocked(axios.post).mockResolvedValueOnce({ data: { valid: true } });
+      // Mock the platform renewing its token pair during refresh
+      vi.mocked(axios.post).mockResolvedValueOnce(platformRenewal);
       const newTokens = await provider.exchangeRefreshToken(client, tokens.refresh_token!);
 
       expect(newTokens.access_token).toBeDefined();
@@ -174,13 +184,13 @@ describe("ElnoraOAuthProvider — advanced flows", () => {
       expect(newTokens.access_token).not.toBe(tokens.access_token);
       expect(newTokens.refresh_token).not.toBe(tokens.refresh_token);
       expect(newTokens.token_type).toBe("Bearer");
-      expect(newTokens.expires_in).toBe(3600);
+      expect(newTokens.expires_in).toBeLessThanOrEqual(3600 - 300);
     });
 
     it("invalidates old refresh token after rotation", async () => {
       const { tokens, client } = await issueTokens(provider);
 
-      vi.mocked(axios.post).mockResolvedValueOnce({ data: { valid: true } });
+      vi.mocked(axios.post).mockResolvedValueOnce(platformRenewal);
       await provider.exchangeRefreshToken(client, tokens.refresh_token!);
 
       // Old refresh token should no longer work
@@ -219,7 +229,7 @@ describe("ElnoraOAuthProvider — advanced flows", () => {
     it("allows scope downgrade on refresh", async () => {
       const { tokens, client } = await issueTokens(provider);
 
-      vi.mocked(axios.post).mockResolvedValueOnce({ data: { valid: true } });
+      vi.mocked(axios.post).mockResolvedValueOnce(platformRenewal);
       // Request a subset of original scopes — should succeed
       const newTokens = await provider.exchangeRefreshToken(client, tokens.refresh_token!, ["tasks:read"]);
       expect(newTokens.access_token).toBeDefined();
@@ -256,10 +266,11 @@ describe("ElnoraOAuthProvider — advanced flows", () => {
   });
 
   describe("verifyAccessToken — refresh token cleanup on revocation", () => {
-    it("cleans refreshTokenIndex when platform returns { valid: false }", async () => {
+    it("cleans refreshTokenIndex when platform returns { valid: false } and refuses to renew it", async () => {
       const { tokens, client } = await issueTokens(provider);
 
       vi.mocked(axios.post).mockResolvedValueOnce({ data: { valid: false } });
+      vi.mocked(axios.post).mockRejectedValueOnce(rejectedRefresh("Refresh token has expired."));
       await expect(provider.verifyAccessToken(tokens.access_token)).rejects.toThrow(
         "Underlying platform token revoked",
       );
@@ -270,22 +281,18 @@ describe("ElnoraOAuthProvider — advanced flows", () => {
       ).rejects.toThrow("Invalid refresh token");
     });
 
-    it("cleans refreshTokenIndex when platform returns 401", async () => {
+    it("keeps refreshTokenIndex when validation returns 401", async () => {
       const { tokens, client } = await issueTokens(provider);
 
-      const axiosError = new Error("Unauthorized") as Error & { response: { status: number } };
-      (axiosError as Record<string, unknown>).response = { status: 401 };
-      (axiosError as Record<string, unknown>).isAxiosError = true;
-      vi.mocked(axios.post).mockRejectedValueOnce(axiosError);
+      vi.mocked(axios.post).mockRejectedValueOnce(httpError(401));
 
       await expect(provider.verifyAccessToken(tokens.access_token)).rejects.toThrow(
-        "Underlying platform token revoked",
+        "Platform token validation unavailable",
       );
 
-      // Refresh token should also be invalidated
-      await expect(
-        provider.exchangeRefreshToken(client, tokens.refresh_token!),
-      ).rejects.toThrow("Invalid refresh token");
+      // Refresh token still works
+      vi.mocked(axios.post).mockResolvedValueOnce(platformRenewal);
+      await expect(provider.exchangeRefreshToken(client, tokens.refresh_token!)).resolves.toBeDefined();
     });
   });
 
@@ -348,34 +355,41 @@ describe("ElnoraOAuthProvider — advanced flows", () => {
       expect(authInfo.clientId).toBeDefined();
     });
 
-    it("refreshes expired platform token when validation returns 401", async () => {
+    it("does not renew when validation returns 401", async () => {
       const { tokens } = await issueTokens(provider);
+      vi.mocked(axios.post).mockClear();
 
-      // Platform validation returns 401
-      const axiosError = new Error("Unauthorized") as Error & { response: { status: number } };
-      (axiosError as Record<string, unknown>).response = { status: 401 };
-      (axiosError as Record<string, unknown>).isAxiosError = true;
-      vi.mocked(axios.post).mockRejectedValueOnce(axiosError);
-      // Platform refresh succeeds
-      vi.mocked(axios.post).mockResolvedValueOnce({
-        data: { access_token: "new-platform-token", refresh_token: "new-platform-refresh-token" },
-      });
+      // Platform validation refuses this server's credentials — not evidence the platform token expired
+      vi.mocked(axios.post).mockRejectedValueOnce(httpError(401));
 
-      const authInfo = await provider.verifyAccessToken(tokens.access_token);
-      expect(authInfo.token).toBe(tokens.access_token);
+      await expect(provider.verifyAccessToken(tokens.access_token)).rejects.toThrow("Platform token validation unavailable");
+      expect(vi.mocked(axios.post)).toHaveBeenCalledTimes(1);
+      expect(await provider.getPlatformToken(tokens.access_token)).toBe("platform-token-123");
     });
 
-    it("revokes when platform token refresh fails", async () => {
+    it("revokes when the platform refuses the platform refresh token", async () => {
       const { tokens } = await issueTokens(provider);
 
       // Platform validation returns valid:false
       vi.mocked(axios.post).mockResolvedValueOnce({ data: { valid: false } });
-      // Platform refresh also fails
-      vi.mocked(axios.post).mockRejectedValueOnce(new Error("refresh failed"));
+      // Platform refuses the refresh token
+      vi.mocked(axios.post).mockRejectedValueOnce(rejectedRefresh("Refresh token has expired."));
 
       await expect(provider.verifyAccessToken(tokens.access_token)).rejects.toThrow(
         "Underlying platform token revoked",
       );
+    });
+
+    it("fails closed and keeps the grant when platform token refresh fails for another reason", async () => {
+      const { tokens } = await issueTokens(provider);
+
+      vi.mocked(axios.post).mockResolvedValueOnce({ data: { valid: false } });
+      vi.mocked(axios.post).mockRejectedValueOnce(new Error("refresh failed"));
+
+      await expect(provider.verifyAccessToken(tokens.access_token)).rejects.toThrow(
+        "Platform token refresh unavailable",
+      );
+      expect(await provider.getPlatformToken(tokens.access_token)).toBe("platform-token-123");
     });
 
     it("uses refreshed platform token on subsequent validation", async () => {
