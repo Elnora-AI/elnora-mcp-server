@@ -5,6 +5,13 @@ All notable changes to the Elnora MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.8.5](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v1.8.4...mcp-server-v1.8.5) (2026-10-29)
+
+
+### Bug Fixes
+
+* **auth:** keep OAuth sessions signed in across token refreshes ([#407](https://github.com/Elnora-AI/elnora-mcp-server/issues/407)) ([99c0f9e](https://github.com/Elnora-AI/elnora-mcp-server/commit/99c0f9e571e9d68b3c9b2255560c35836dfe72fc))
+
 ## [1.8.4](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v1.8.3...mcp-server-v1.8.4) (2026-10-24)
 
 
