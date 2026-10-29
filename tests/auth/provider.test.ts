@@ -132,7 +132,9 @@ describe("ElnoraOAuthProvider", () => {
       expect(tokens.access_token).toBeDefined();
       expect(tokens.refresh_token).toBeDefined();
       expect(tokens.token_type).toBe("Bearer");
-      expect(tokens.expires_in).toBe(3600);
+      // Ends a margin before the platform token it carries
+      expect(tokens.expires_in).toBeLessThanOrEqual(3600 - 300);
+      expect(tokens.expires_in).toBeGreaterThan(3600 - 300 - 5);
     });
 
     it("throws for invalid authorization code", async () => {

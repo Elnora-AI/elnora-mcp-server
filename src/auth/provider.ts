@@ -9,7 +9,7 @@ import {
   OAuthTokenRevocationRequest,
 } from "@modelcontextprotocol/sdk/shared/auth.js";
 import { AuthInfo } from "@modelcontextprotocol/sdk/server/auth/types.js";
-import { InvalidTokenError, ServerError } from "@modelcontextprotocol/sdk/server/auth/errors.js";
+import { InvalidGrantError, InvalidScopeError, InvalidTokenError, ServerError } from "@modelcontextprotocol/sdk/server/auth/errors.js";
 import { TokenStore } from "./token-store.js";
 import { ElnoraConfig, TokenRecord, AuthorizationSession } from "../types.js";
 import { logAuthEvent } from "../middleware/tool-logging.js";
@@ -18,6 +18,7 @@ import { renderConsentPage, CONSENT_CSP } from "./consent-page.js";
 import {
   ACCESS_TOKEN_TTL_SECONDS,
   REFRESH_TOKEN_TTL_SECONDS,
+  PLATFORM_TOKEN_EXPIRY_MARGIN_SECONDS,
   AUTH_CODE_TTL_SECONDS,
   CONSENT_SESSION_TTL_SECONDS,
   REQUEST_TIMEOUT_MS,
@@ -52,6 +53,60 @@ function safeErrorMessage(error: unknown): string {
     return `${error.response?.status ?? "network"}: ${error.message}`;
   }
   return error instanceof Error ? error.message : "Unknown error";
+}
+
+/** Result of renewing the platform token pair with the platform refresh token. */
+type PlatformRenewal =
+  | { kind: "renewed"; accessToken: string; refreshToken?: string; expiresIn?: number }
+  | { kind: "rejected"; reason: string }
+  | { kind: "unavailable" };
+
+/**
+ * How long to wait, after the platform reports the platform refresh token as already used, for the request
+ * that used it to store its result before treating the grant as dead.
+ */
+const CONCURRENT_RENEWAL_GRACE_MS = 1000;
+
+/**
+ * The platform answers that mean the platform refresh token itself is no longer accepted. Only these end
+ * a grant: every other failure, including other invalid_grant answers, may come from a fault on the
+ * platform or in this server's configuration, and must not sign the user out.
+ */
+const PLATFORM_REFRESH_REJECTIONS = new Map([
+  ["Invalid refresh token.", "unknown_token"],
+  ["Refresh token has been revoked.", "revoked"],
+  ["Refresh token has expired.", "expired"],
+]);
+
+/** Classify a failed platform refresh call, with details (including a `reason`) for the auth log. */
+function classifyRenewalFailure(error: unknown): { kind: "rejected" | "unavailable"; details: { reason: string } & Record<string, unknown> } {
+  if (!axios.isAxiosError(error) || !error.response) {
+    return { kind: "unavailable", details: { reason: "no_response", error: safeErrorMessage(error) } };
+  }
+  const { status, data } = error.response;
+  const description = typeof data?.error_description === "string" ? data.error_description : undefined;
+  const rejection = status === 400 && data?.error === "invalid_grant" && description !== undefined
+    ? PLATFORM_REFRESH_REJECTIONS.get(description)
+    : undefined;
+  if (rejection) {
+    return { kind: "rejected", details: { reason: rejection } };
+  }
+  const details: { reason: string } & Record<string, unknown> = { reason: status === 429 ? "rate_limited" : "http_error", status };
+  if (description !== undefined) {
+    details.platformError = description.slice(0, 100);
+  }
+  return { kind: "unavailable", details };
+}
+
+/**
+ * Lifetime of an access token carrying a platform token that was requested at `requestedAtMs` and lives
+ * `expiresIn` seconds: it ends PLATFORM_TOKEN_EXPIRY_MARGIN_SECONDS before the platform token does (and is
+ * never shorter than a minute).
+ */
+function accessTokenTtl(requestedAtMs: number, expiresIn: number | undefined): number {
+  const platformExpiresAt = Math.floor(requestedAtMs / 1000) + (expiresIn ?? ACCESS_TOKEN_TTL_SECONDS);
+  const ttl = platformExpiresAt - PLATFORM_TOKEN_EXPIRY_MARGIN_SECONDS - Math.floor(Date.now() / 1000);
+  return Math.min(ACCESS_TOKEN_TTL_SECONDS, Math.max(60, ttl));
 }
 
 /**
@@ -89,6 +144,8 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
   private _clientsStore: OAuthRegisteredClientsStore;
   private store: TokenStore;
   private config: ElnoraConfig;
+  /** In-place platform renewals in progress, by access token */
+  private renewalsInFlight = new Map<string, Promise<AuthInfo>>();
 
   constructor(config: ElnoraConfig, store: TokenStore, clientsStore: OAuthRegisteredClientsStore) {
     this.config = config;
@@ -274,7 +331,7 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
   ): Promise<string> {
     const session = await this.store.getSession(authorizationCode);
     if (!session) {
-      throw new Error("Invalid or expired authorization code");
+      throw new InvalidGrantError("Invalid or expired authorization code");
     }
     return session.codeChallenge;
   }
@@ -288,12 +345,13 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
   ): Promise<OAuthTokens> {
     const session = await this.store.getSession(authorizationCode);
     if (!session) {
-      throw new Error("Invalid or expired authorization code");
+      throw new InvalidGrantError("Invalid or expired authorization code");
     }
 
     if (session.clientId !== client.client_id) {
       await this.store.deleteSession(authorizationCode);
-      throw new Error("Authorization code was not issued to this client");
+      logAuthEvent("authorization_code_rejected", client.client_id, { reason: "client_mismatch", ownerClientId: session.clientId });
+      throw new InvalidGrantError("Authorization code was not issued to this client");
     }
 
     // Validate redirect_uri matches the one from the authorization request (RFC 6749 §4.1.3)
@@ -302,12 +360,12 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
     if (session.redirectUri) {
       if (!redirectUri || redirectUri !== session.redirectUri) {
         logAuthEvent("redirect_uri_mismatch", client.client_id);
-        throw new Error("redirect_uri does not match the authorization request");
+        throw new InvalidGrantError("redirect_uri does not match the authorization request");
       }
     }
 
     if (!session.platformCode) {
-      throw new Error("Platform authentication not completed — user must authenticate on the platform first");
+      throw new InvalidGrantError("Platform authentication not completed; user must authenticate on the platform first");
     }
 
     // Exchange with Elnora platform for a platform token BEFORE deleting the session.
@@ -315,8 +373,10 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
     // can retry without restarting the full auth flow.
     let platformToken: string;
     let platformRefreshToken: string | undefined;
+    let platformExpiresIn: number | undefined;
+    const requestedAt = Date.now();
     try {
-      const response = await axios.post<{ access_token: string; refresh_token?: string }>(
+      const response = await axios.post<{ access_token: string; refresh_token?: string; expires_in?: number }>(
         this.config.tokenExchangeUrl,
         {
           grant_type: "authorization_code",
@@ -328,6 +388,7 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
       );
       platformToken = response.data.access_token;
       platformRefreshToken = response.data.refresh_token;
+      platformExpiresIn = response.data.expires_in;
     } catch (error) {
       logAuthEvent("platform_token_exchange_failed", client.client_id, { error: safeErrorMessage(error) });
       throw new Error("Failed to exchange authorization code with platform");
@@ -337,7 +398,14 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
     await this.store.deleteSession(authorizationCode);
 
     // Issue MCP tokens (separate from platform token — CoSAI MCP-T1)
-    return this.issueTokens(client.client_id, session.scopes, platformToken, resource?.toString(), platformRefreshToken);
+    return this.issueTokens(
+      client.client_id,
+      session.scopes,
+      platformToken,
+      resource?.toString(),
+      platformRefreshToken,
+      accessTokenTtl(requestedAt, platformExpiresIn),
+    );
   }
 
   async exchangeRefreshToken(
@@ -348,73 +416,95 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
   ): Promise<OAuthTokens> {
     const accessTokenKey = await this.store.getRefreshIndex(refreshToken);
     if (!accessTokenKey) {
-      throw new Error("Invalid refresh token");
+      logAuthEvent("refresh_token_rejected", client.client_id, { reason: "unknown_refresh_token" });
+      throw new InvalidGrantError("Invalid refresh token");
     }
 
+    // A tool call may be renewing this grant in place right now: wait for it, so the record read below holds
+    // the platform refresh token that renewal produced.
+    await this.renewalsInFlight.get(accessTokenKey)?.catch(() => undefined);
+
     const record = await this.store.getTokenRecord(accessTokenKey);
-    if (!record || record.clientId !== client.client_id) {
-      throw new Error("Invalid refresh token");
+    if (!record) {
+      logAuthEvent("refresh_token_rejected", client.client_id, { reason: "missing_token_record" });
+      throw new InvalidGrantError("Invalid refresh token");
+    }
+    if (record.clientId !== client.client_id) {
+      logAuthEvent("refresh_token_rejected", client.client_id, { reason: "client_mismatch", ownerClientId: record.clientId });
+      throw new InvalidGrantError("Invalid refresh token");
     }
 
     // Validate scope subset constraint (OAuth 2.1: refresh MUST NOT escalate scopes)
     if (scopes !== undefined) {
       if (scopes.length === 0) {
-        throw new Error("Scopes array must not be empty — omit the field to keep original scopes");
+        throw new InvalidScopeError("Scopes array must not be empty; omit the field to keep original scopes");
       }
-      const escalated = scopes.filter((s) => !record.scopes.includes(s));
-      if (escalated.length > 0) {
-        throw new Error(`Scope escalation not allowed. Requested scopes not in original grant: ${escalated.join(", ")}`);
+      if (scopes.some((s) => !record.scopes.includes(s))) {
+        logAuthEvent("refresh_token_rejected", client.client_id, { reason: "scope_escalation" });
+        throw new InvalidScopeError("Scope escalation not allowed. Requested scope exceeds the original grant");
       }
     }
 
-    // Re-validate platform token before issuing new tokens — ensures revoked
-    // platform sessions don't survive through refresh (CoSAI MCP-T7)
-    try {
-      const validation = await axios.post(
-        this.config.tokenValidationUrl,
-        { token: record.platformToken },
-        { timeout: REQUEST_TIMEOUT_MS, headers: this.validationHeaders, maxRedirects: 0 }, // never resend credentials to a redirect target
-      );
-      if (!validation.data.valid) {
-        await this.store.deleteTokenRecord(accessTokenKey);
-        await this.store.deleteRefreshIndex(refreshToken);
-        await this.store.deleteValidationCache(accessTokenKey);
-        logAuthEvent("refresh_platform_token_revoked", client.client_id);
-        throw new Error("Underlying platform token has been revoked");
-      }
-    } catch (error) {
-      if (error instanceof Error && error.message === "Underlying platform token has been revoked") {
-        throw error;
-      }
-      if (axios.isAxiosError(error) && error.response?.status === 401) {
-        await this.store.deleteTokenRecord(accessTokenKey);
-        await this.store.deleteRefreshIndex(refreshToken);
-        await this.store.deleteValidationCache(accessTokenKey);
-        logAuthEvent("refresh_platform_token_revoked", client.client_id);
-        throw new Error("Underlying platform token has been revoked");
-      }
-      logAuthEvent("refresh_platform_validation_error", client.client_id, { error: safeErrorMessage(error) });
-      throw new Error("Platform token validation unavailable — please retry");
+    // Renew the platform token pair on every refresh (CoSAI MCP-T7). The platform refresh grant is
+    // authoritative for whether the session is still alive, and the new platform token outlives the new
+    // access token, so requests never reach the platform with an expired token.
+    if (!record.platformRefreshToken) {
+      await this.deleteGrant(accessTokenKey, refreshToken);
+      logAuthEvent("refresh_platform_token_revoked", client.client_id, { path: "refresh", reason: "no_platform_refresh_token" });
+      throw new InvalidGrantError("Refresh token is no longer valid");
     }
 
-    // Rotate: delete old tokens
-    await this.store.deleteTokenRecord(accessTokenKey);
+    const requestedAt = Date.now();
+    const renewal = await this.renewPlatformTokens(record.platformRefreshToken, client.client_id, "refresh");
+    if (renewal.kind === "unavailable") {
+      throw new ServerError("Platform token refresh unavailable, please retry");
+    }
+    if (renewal.kind === "rejected") {
+      // Another request (e.g. on another server instance) may have renewed this grant meanwhile with the same
+      // single-use token. Then the grant is alive and a retry will succeed.
+      if (await this.renewedConcurrently(accessTokenKey, record.platformRefreshToken, renewal.reason)) {
+        logAuthEvent("platform_token_renewed_concurrently", client.client_id, { path: "refresh" });
+        throw new ServerError("Platform token refresh unavailable, please retry");
+      }
+      await this.deleteGrant(accessTokenKey, refreshToken);
+      logAuthEvent("refresh_platform_token_revoked", client.client_id, { path: "refresh", reason: renewal.reason });
+      throw new InvalidGrantError("Refresh token is no longer valid");
+    }
+
+    // The platform has consumed the old platform refresh token, so store the renewed pair on the current
+    // grant before anything else: if issuing below fails, a retry then presents the new one.
+    await this.store.setTokenRecord(
+      accessTokenKey,
+      { ...record, platformToken: renewal.accessToken, platformRefreshToken: renewal.refreshToken },
+      REFRESH_TOKEN_TTL_SECONDS,
+    );
+
+    const tokens = await this.issueTokens(
+      client.client_id,
+      scopes || record.scopes,
+      renewal.accessToken,
+      resource?.toString() || record.resource,
+      renewal.refreshToken,
+      accessTokenTtl(requestedAt, renewal.expiresIn),
+    );
+
+    // Retire the old grant only once the new one exists. Its refresh token must be gone before the new tokens
+    // are returned; the rest is cleanup that must not cost the client the tokens it was just issued.
     await this.store.deleteRefreshIndex(refreshToken);
-    await this.store.deleteValidationCache(accessTokenKey);
+    const cleanup = await Promise.allSettled([
+      this.store.deleteTokenRecord(accessTokenKey),
+      this.store.deleteValidationCache(accessTokenKey),
+    ]);
+    if (cleanup.some((result) => result.status === "rejected")) {
+      logAuthEvent("refresh_cleanup_failed", client.client_id);
+    }
 
     logAuthEvent("refresh_token_rotation", client.client_id, {
       previousScopes: record.scopes,
       requestedScopes: scopes || record.scopes,
     });
 
-    // Issue new tokens with the validated platform token
-    return this.issueTokens(
-      client.client_id,
-      scopes || record.scopes,
-      record.platformToken,
-      resource?.toString() || record.resource,
-      record.platformRefreshToken,
-    );
+    return tokens;
   }
 
   async verifyAccessToken(token: string): Promise<AuthInfo> {
@@ -423,10 +513,8 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
       throw new InvalidTokenError("Invalid access token");
     }
 
+    // An expired access token is refused, but its grant is kept: the client's refresh token stays valid
     if (record.expiresAt < Math.floor(Date.now() / 1000)) {
-      await this.store.deleteTokenRecord(token);
-      await this.store.deleteValidationCache(token);
-      await this.store.deleteRefreshIndex(record.refreshToken);
       throw new InvalidTokenError("Access token expired");
     }
 
@@ -444,30 +532,26 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
     }
 
     // Validate platform token is still valid
+    let valid: boolean;
     try {
       const validation = await axios.post(
         this.config.tokenValidationUrl,
         { token: record.platformToken },
         { timeout: REQUEST_TIMEOUT_MS, headers: this.validationHeaders, maxRedirects: 0 }, // never resend credentials to a redirect target
       );
-      if (!validation.data.valid) {
-        return this.attemptRefreshOrRevoke(token, record);
-      }
-      // Cache successful validation
-      await this.store.setValidationCache(token, Math.floor(Date.now() / 1000), VALIDATION_CACHE_TTL_SECONDS);
+      valid = Boolean(validation.data.valid);
     } catch (error) {
-      // Re-throw our own revocation errors (from the valid:false check above)
-      if (error instanceof InvalidTokenError) {
-        throw error;
-      }
-      if (axios.isAxiosError(error) && error.response?.status === 401) {
-        return this.attemptRefreshOrRevoke(token, record);
-      }
-      // Network errors — fail-closed for security (SOC 2 / pharma revocation requirements).
-      // Reject the request and force retry on next call.
+      // No answer (network error, platform error, or the platform refusing this server's own credentials)
+      // says nothing about the user's token — fail closed for security (SOC 2 / pharma revocation
+      // requirements) without touching the grant, and let the client retry.
       logAuthEvent("platform_validation_network_error", record.clientId, { error: safeErrorMessage(error) });
-      throw new ServerError("Platform token validation unavailable — please retry");
+      throw new ServerError("Platform token validation unavailable, please retry");
     }
+    if (!valid) {
+      return this.renewInPlace(token, record);
+    }
+    // Cache successful validation
+    await this.store.setValidationCache(token, Math.floor(Date.now() / 1000), VALIDATION_CACHE_TTL_SECONDS);
 
     return {
       token,
@@ -599,17 +683,30 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
   }
 
   /**
-   * Attempt to refresh the platform token, update the stored record, and return AuthInfo.
-   * If refresh fails or no refresh token exists, revokes all tokens and throws.
+   * Renew the platform token of a grant in place, so its access token keeps working; revoke the grant if
+   * the platform no longer accepts it. Concurrent requests with the same access token share one renewal,
+   * because the platform refresh token is single-use.
    */
-  private async attemptRefreshOrRevoke(token: string, record: TokenRecord): Promise<AuthInfo> {
+  private renewInPlace(token: string, record: TokenRecord): Promise<AuthInfo> {
+    let renewal = this.renewalsInFlight.get(token);
+    if (!renewal) {
+      renewal = this.doRenewInPlace(token, record).finally(() => this.renewalsInFlight.delete(token));
+      this.renewalsInFlight.set(token, renewal);
+    }
+    return renewal;
+  }
+
+  private async doRenewInPlace(token: string, record: TokenRecord): Promise<AuthInfo> {
     if (record.platformRefreshToken) {
-      const refreshed = await this.refreshPlatformToken(record.platformRefreshToken, record.clientId);
-      if (refreshed) {
+      const renewal = await this.renewPlatformTokens(record.platformRefreshToken, record.clientId, "in_place");
+      if (renewal.kind === "unavailable") {
+        throw new ServerError("Platform token refresh unavailable, please retry");
+      }
+      if (renewal.kind === "renewed") {
         const updatedRecord: TokenRecord = {
           ...record,
-          platformToken: refreshed.accessToken,
-          platformRefreshToken: refreshed.refreshToken || record.platformRefreshToken,
+          platformToken: renewal.accessToken,
+          platformRefreshToken: renewal.refreshToken,
         };
         await this.store.setTokenRecord(token, updatedRecord, REFRESH_TOKEN_TTL_SECONDS);
         await this.store.setValidationCache(token, Math.floor(Date.now() / 1000), VALIDATION_CACHE_TTL_SECONDS);
@@ -622,23 +719,35 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
           resource: record.resource ? new URL(record.resource) : undefined,
         };
       }
+      // A refresh of this grant may have renewed it meanwhile with the same single-use token
+      const current = await this.renewedConcurrently(token, record.platformRefreshToken, renewal.reason);
+      if (current) {
+        logAuthEvent("platform_token_renewed_concurrently", record.clientId, { path: "in_place" });
+        return {
+          token,
+          clientId: current.clientId,
+          scopes: current.scopes,
+          expiresAt: current.expiresAt,
+          resource: current.resource ? new URL(current.resource) : undefined,
+        };
+      }
     }
-    await this.store.deleteTokenRecord(token);
-    await this.store.deleteValidationCache(token);
-    await this.store.deleteRefreshIndex(record.refreshToken);
+    await this.deleteGrant(token, record.refreshToken);
+    logAuthEvent("refresh_platform_token_revoked", record.clientId, { path: "in_place" });
     throw new InvalidTokenError("Underlying platform token revoked");
   }
 
   /**
-   * Attempt to refresh an expired platform token using the platform's refresh token.
-   * Returns new tokens on success, or null if refresh fails (caller falls back to revocation).
+   * Renew the platform token pair with the platform refresh token. The platform refresh token is
+   * single-use: once the platform has renewed, only the returned pair is valid.
    */
-  private async refreshPlatformToken(
+  private async renewPlatformTokens(
     platformRefreshToken: string,
     clientId: string,
-  ): Promise<{ accessToken: string; refreshToken?: string } | null> {
+    path: "refresh" | "in_place",
+  ): Promise<PlatformRenewal> {
     try {
-      const response = await axios.post<{ access_token: string; refresh_token?: string }>(
+      const response = await axios.post<{ access_token?: string; refresh_token?: string; expires_in?: number }>(
         this.config.tokenExchangeUrl,
         {
           grant_type: "refresh_token",
@@ -648,22 +757,56 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
         },
         { timeout: REQUEST_TIMEOUT_MS, maxRedirects: 0 }, // never resend credentials to a redirect target
       );
+      const data = response.data ?? {};
+      if (typeof data.access_token !== "string" || !data.access_token) {
+        logAuthEvent("platform_token_refresh_failed", clientId, { path, outcome: "unavailable", reason: "no_access_token" });
+        return { kind: "unavailable" };
+      }
+      const refreshToken = typeof data.refresh_token === "string" && data.refresh_token ? data.refresh_token : undefined;
+      if (!refreshToken) {
+        logAuthEvent("platform_refresh_token_missing", clientId, { path });
+      }
       return {
-        accessToken: response.data.access_token,
-        refreshToken: response.data.refresh_token,
+        kind: "renewed",
+        accessToken: data.access_token,
+        refreshToken,
+        expiresIn: typeof data.expires_in === "number" ? data.expires_in : undefined,
       };
     } catch (error) {
-      logAuthEvent("platform_token_refresh_failed", clientId, { error: safeErrorMessage(error) });
-      return null;
+      const failure = classifyRenewalFailure(error);
+      logAuthEvent("platform_token_refresh_failed", clientId, { path, outcome: failure.kind, ...failure.details });
+      return failure.kind === "rejected" ? { kind: "rejected", reason: failure.details.reason } : { kind: "unavailable" };
     }
+  }
+
+  /**
+   * After the platform rejected `presented`, the grant's record as renewed by a concurrent request that used
+   * the same single-use token, if there is one. "Already used" is waited out briefly, because the request
+   * that used it may not have stored its result yet.
+   */
+  private async renewedConcurrently(accessToken: string, presented: string, reason: string): Promise<TokenRecord | undefined> {
+    let current = await this.store.getTokenRecord(accessToken);
+    if (current?.platformRefreshToken === presented && reason === "revoked") {
+      await new Promise((resolve) => setTimeout(resolve, CONCURRENT_RENEWAL_GRACE_MS));
+      current = await this.store.getTokenRecord(accessToken);
+    }
+    return current && current.platformRefreshToken !== presented ? current : undefined;
+  }
+
+  /** Delete a grant: its refresh index first (that is what allows reuse), then its record and cache. */
+  private async deleteGrant(accessToken: string, refreshToken: string): Promise<void> {
+    await this.store.deleteRefreshIndex(refreshToken);
+    await this.store.deleteTokenRecord(accessToken);
+    await this.store.deleteValidationCache(accessToken);
   }
 
   private async issueTokens(
     clientId: string,
     scopes: string[],
     platformToken: string,
-    resource?: string,
-    platformRefreshToken?: string,
+    resource: string | undefined,
+    platformRefreshToken: string | undefined,
+    accessTtlSeconds: number,
   ): Promise<OAuthTokens> {
     const accessToken = crypto.randomBytes(32).toString("base64url");
     const refreshToken = crypto.randomBytes(32).toString("base64url");
@@ -677,19 +820,19 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
       clientId,
       scopes,
       resource,
-      expiresAt: now + ACCESS_TOKEN_TTL_SECONDS,
+      expiresAt: now + accessTtlSeconds,
       createdAt: now,
     };
 
     await this.store.setTokenRecord(accessToken, record, REFRESH_TOKEN_TTL_SECONDS);
     await this.store.setRefreshIndex(refreshToken, accessToken, REFRESH_TOKEN_TTL_SECONDS);
 
-    logAuthEvent("tokens_issued", clientId, { expiresAt: new Date((now + ACCESS_TOKEN_TTL_SECONDS) * 1000).toISOString() });
+    logAuthEvent("tokens_issued", clientId, { expiresAt: new Date((now + accessTtlSeconds) * 1000).toISOString() });
 
     return {
       access_token: accessToken,
       token_type: "Bearer",
-      expires_in: ACCESS_TOKEN_TTL_SECONDS,
+      expires_in: accessTtlSeconds,
       refresh_token: refreshToken,
     };
   }

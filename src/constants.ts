@@ -5,6 +5,9 @@ export const LONG_REQUEST_TIMEOUT_MS = 120_000;
 // Auth constants
 export const ACCESS_TOKEN_TTL_SECONDS = 3600; // 1 hour
 export const REFRESH_TOKEN_TTL_SECONDS = 30 * 24 * 3600; // 30 days
+// An access token expires this long before the platform token it carries, so a request made with a
+// still-valid access token never reaches the platform with an expired platform token.
+export const PLATFORM_TOKEN_EXPIRY_MARGIN_SECONDS = 300; // 5 minutes
 export const AUTH_CODE_TTL_SECONDS = 300; // 5 minutes
 // Authorization sessions that must pass through the consent screen get a longer lifetime than the
 // bare auth-code TTL: the window has to cover reading the consent page plus the platform login

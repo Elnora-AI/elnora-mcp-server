@@ -25,8 +25,9 @@ beforeAll(async () => {
       res.end(JSON.stringify({ valid: true, user_id: "1", access_token: "t", refresh_token: "r" }));
       return;
     }
-    if (req.url === "/unauthorized") {
-      res.writeHead(401).end();
+    if (req.url === "/invalid") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ valid: false }));
       return;
     }
     res.writeHead(307, { Location: `/elsewhere${req.url}` }).end();
@@ -101,9 +102,10 @@ describe("platform requests do not follow redirects", () => {
     expect(reachedElsewhere).toEqual([]);
   });
 
-  it("refresh token re-validation fails", async () => {
+  it("refresh token renewal fails and the grant is kept", async () => {
     await expect(providerFor().exchangeRefreshToken(client, record.refreshToken)).rejects.toThrow();
     expect(reachedElsewhere).toEqual([]);
+    expect(await store.getRefreshIndex(record.refreshToken)).toBe(record.accessToken);
   });
 
   it("authorization code exchange fails", async () => {
@@ -114,9 +116,9 @@ describe("platform requests do not follow redirects", () => {
     expect(await store.getSession("auth-code-1")).toBeDefined();
   });
 
-  it("platform token refresh fails and the token is revoked", async () => {
-    await expect(providerFor("/unauthorized").verifyAccessToken(record.accessToken)).rejects.toThrow();
+  it("in-place platform token renewal fails and the grant is kept", async () => {
+    await expect(providerFor("/invalid").verifyAccessToken(record.accessToken)).rejects.toThrow();
     expect(reachedElsewhere).toEqual([]);
-    expect(await store.getTokenRecord(record.accessToken)).toBeUndefined();
+    expect(await store.getTokenRecord(record.accessToken)).toBeDefined();
   });
 });
