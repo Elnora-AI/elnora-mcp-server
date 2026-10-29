@@ -9,7 +9,7 @@ import {
   OAuthTokenRevocationRequest,
 } from "@modelcontextprotocol/sdk/shared/auth.js";
 import { AuthInfo } from "@modelcontextprotocol/sdk/server/auth/types.js";
-import { InvalidTokenError, ServerError } from "@modelcontextprotocol/sdk/server/auth/errors.js";
+import { InvalidGrantError, InvalidScopeError, InvalidTokenError, ServerError } from "@modelcontextprotocol/sdk/server/auth/errors.js";
 import { TokenStore } from "./token-store.js";
 import { ElnoraConfig, TokenRecord, AuthorizationSession } from "../types.js";
 import { logAuthEvent } from "../middleware/tool-logging.js";
@@ -274,7 +274,7 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
   ): Promise<string> {
     const session = await this.store.getSession(authorizationCode);
     if (!session) {
-      throw new Error("Invalid or expired authorization code");
+      throw new InvalidGrantError("Invalid or expired authorization code");
     }
     return session.codeChallenge;
   }
@@ -288,12 +288,13 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
   ): Promise<OAuthTokens> {
     const session = await this.store.getSession(authorizationCode);
     if (!session) {
-      throw new Error("Invalid or expired authorization code");
+      throw new InvalidGrantError("Invalid or expired authorization code");
     }
 
     if (session.clientId !== client.client_id) {
       await this.store.deleteSession(authorizationCode);
-      throw new Error("Authorization code was not issued to this client");
+      logAuthEvent("authorization_code_rejected", client.client_id, { reason: "client_mismatch", ownerClientId: session.clientId });
+      throw new InvalidGrantError("Authorization code was not issued to this client");
     }
 
     // Validate redirect_uri matches the one from the authorization request (RFC 6749 §4.1.3)
@@ -302,12 +303,12 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
     if (session.redirectUri) {
       if (!redirectUri || redirectUri !== session.redirectUri) {
         logAuthEvent("redirect_uri_mismatch", client.client_id);
-        throw new Error("redirect_uri does not match the authorization request");
+        throw new InvalidGrantError("redirect_uri does not match the authorization request");
       }
     }
 
     if (!session.platformCode) {
-      throw new Error("Platform authentication not completed — user must authenticate on the platform first");
+      throw new InvalidGrantError("Platform authentication not completed; user must authenticate on the platform first");
     }
 
     // Exchange with Elnora platform for a platform token BEFORE deleting the session.
@@ -348,22 +349,28 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
   ): Promise<OAuthTokens> {
     const accessTokenKey = await this.store.getRefreshIndex(refreshToken);
     if (!accessTokenKey) {
-      throw new Error("Invalid refresh token");
+      logAuthEvent("refresh_token_rejected", client.client_id, { reason: "unknown_refresh_token" });
+      throw new InvalidGrantError("Invalid refresh token");
     }
 
     const record = await this.store.getTokenRecord(accessTokenKey);
-    if (!record || record.clientId !== client.client_id) {
-      throw new Error("Invalid refresh token");
+    if (!record) {
+      logAuthEvent("refresh_token_rejected", client.client_id, { reason: "missing_token_record" });
+      throw new InvalidGrantError("Invalid refresh token");
+    }
+    if (record.clientId !== client.client_id) {
+      logAuthEvent("refresh_token_rejected", client.client_id, { reason: "client_mismatch", ownerClientId: record.clientId });
+      throw new InvalidGrantError("Invalid refresh token");
     }
 
     // Validate scope subset constraint (OAuth 2.1: refresh MUST NOT escalate scopes)
     if (scopes !== undefined) {
       if (scopes.length === 0) {
-        throw new Error("Scopes array must not be empty — omit the field to keep original scopes");
+        throw new InvalidScopeError("Scopes array must not be empty; omit the field to keep original scopes");
       }
-      const escalated = scopes.filter((s) => !record.scopes.includes(s));
-      if (escalated.length > 0) {
-        throw new Error(`Scope escalation not allowed. Requested scopes not in original grant: ${escalated.join(", ")}`);
+      if (scopes.some((s) => !record.scopes.includes(s))) {
+        logAuthEvent("refresh_token_rejected", client.client_id, { reason: "scope_escalation" });
+        throw new InvalidScopeError("Scope escalation not allowed. Requested scope exceeds the original grant");
       }
     }
 
@@ -380,21 +387,16 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
         await this.store.deleteRefreshIndex(refreshToken);
         await this.store.deleteValidationCache(accessTokenKey);
         logAuthEvent("refresh_platform_token_revoked", client.client_id);
-        throw new Error("Underlying platform token has been revoked");
+        throw new InvalidGrantError("Underlying platform token has been revoked");
       }
     } catch (error) {
-      if (error instanceof Error && error.message === "Underlying platform token has been revoked") {
+      if (error instanceof InvalidGrantError) {
         throw error;
       }
-      if (axios.isAxiosError(error) && error.response?.status === 401) {
-        await this.store.deleteTokenRecord(accessTokenKey);
-        await this.store.deleteRefreshIndex(refreshToken);
-        await this.store.deleteValidationCache(accessTokenKey);
-        logAuthEvent("refresh_platform_token_revoked", client.client_id);
-        throw new Error("Underlying platform token has been revoked");
-      }
+      // Not the client's fault (network, platform 5xx, or the platform refusing this server's own
+      // credentials): a retryable 500 server_error, and the grant is kept.
       logAuthEvent("refresh_platform_validation_error", client.client_id, { error: safeErrorMessage(error) });
-      throw new Error("Platform token validation unavailable — please retry");
+      throw new ServerError("Platform token validation unavailable, please retry");
     }
 
     // Rotate: delete old tokens
