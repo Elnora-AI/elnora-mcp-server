@@ -153,7 +153,12 @@ describe("refresh renews the platform token pair", () => {
 });
 
 describe("refresh when the platform refuses the platform refresh token", () => {
-  it.each(["Invalid refresh token.", "Refresh token has been revoked.", "Refresh token has expired."])(
+  it.each([
+    "Invalid refresh token.",
+    "Refresh token has been revoked.",
+    "Refresh token has expired.",
+    "Access to this organization has ended.",
+  ])(
     "returns invalid_grant and deletes the grant (%s)",
     async (description) => {
       const { client, tokens } = await signIn();
@@ -431,6 +436,16 @@ describe("in-place renewal on the /mcp path", () => {
     expect(await grantExists(tokens.access_token, tokens.refresh_token!)).toBe(false);
   });
 
+  it("revokes the grant when the user no longer has access to the organization", async () => {
+    const { tokens } = await signIn();
+    platform.expireAccessTokens();
+    platform.intercept((proceed) => proceed()); // validation answers normally
+    platform.failNext(rejectedRefresh("Access to this organization has ended."));
+
+    await expect(provider.verifyAccessToken(tokens.access_token)).rejects.toBeInstanceOf(InvalidTokenError);
+    expect(await grantExists(tokens.access_token, tokens.refresh_token!)).toBe(false);
+  });
+
   it("fails with a server error and keeps the grant when renewal is unavailable", async () => {
     const { tokens } = await signIn();
     platform.expireAccessTokens();
@@ -548,12 +563,20 @@ describe("auth event logging", () => {
       platform.failNext(rejectedRefresh("Refresh token has expired."));
       await provider.exchangeRefreshToken(client, tokens.refresh_token!).catch(() => undefined);
     });
+    const ended = await signIn();
+    const accessEndedEvents = await authEvents(async () => {
+      platform.failNext(rejectedRefresh("Access to this organization has ended."));
+      await provider.exchangeRefreshToken(ended.client, ended.tokens.refresh_token!).catch(() => undefined);
+    });
 
     expect(events.filter((e) => e.event.startsWith("platform_") || e.event.startsWith("refresh_platform")).map((e) => [e.event, e.details])).toEqual([
       ["platform_token_refresh_failed", { path: "refresh", outcome: "unavailable", reason: "rate_limited", status: 429 }],
       ["platform_token_refresh_failed", { path: "refresh", outcome: "unavailable", reason: "http_error", status: 400, platformError: "x".repeat(100) }],
       ["platform_token_refresh_failed", { path: "refresh", outcome: "rejected", reason: "expired" }],
       ["refresh_platform_token_revoked", { path: "refresh", reason: "expired" }],
+    ]);
+    expect(accessEndedEvents.filter((e) => e.event === "refresh_platform_token_revoked").map((e) => e.details)).toEqual([
+      { path: "refresh", reason: "access_ended" },
     ]);
   });
 
