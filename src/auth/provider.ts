@@ -62,42 +62,49 @@ type PlatformRenewal =
   | { kind: "unavailable" };
 
 /**
- * How long to wait, after the platform reports the platform refresh token as already used, for the request
- * that used it to store its result before treating the grant as dead.
+ * How long to wait, after the platform reports the platform refresh token as already used (or refuses it with an
+ * answer that has no known reason), for the request that used it to store its result before treating the grant as dead.
  */
 const CONCURRENT_RENEWAL_GRACE_MS = 1000;
 
 /**
- * The platform answers that mean the platform refresh token is no longer accepted, either because the token itself is
- * dead or because its user no longer has access to the organization it was issued for. Only these end a grant: every
- * other failure, including other invalid_grant answers, may come from a fault on the platform or in this server's
- * configuration, and must not sign the user out.
+ * Log labels for the platform's invalid_grant answers. They only name the reason: an invalid_grant answer means the
+ * authorization code or refresh token itself is no longer accepted, so every one except PLATFORM_CLIENT_ID_MISMATCH (below)
+ * ends the grant or the pending sign-in, listed here or not. Every other failure may come from a fault on the platform or in
+ * this server's configuration, and must not sign the user out.
  */
-const PLATFORM_REFRESH_REJECTIONS = new Map([
+const PLATFORM_INVALID_GRANT_REASONS = new Map([
   ["Invalid refresh token.", "unknown_token"],
   ["Refresh token has been revoked.", "revoked"],
   ["Refresh token has expired.", "expired"],
+  ["Invalid authorization code.", "unknown_code"],
+  ["Authorization code has already been used.", "code_used"],
+  ["Authorization code has expired.", "code_expired"],
   ["Access to this organization has ended.", "access_ended"],
 ]);
 
-/** Classify a failed platform refresh call, with details (including a `reason`) for the auth log. */
-function classifyRenewalFailure(error: unknown): { kind: "rejected" | "unavailable"; details: { reason: string } & Record<string, unknown> } {
+/** Caused by this server's platform client id setting, not by the grant: retried, so grants issued under a former id fail until they expire. */
+const PLATFORM_CLIENT_ID_MISMATCH = "Client ID mismatch.";
+
+/** Classify a failed platform token call (either grant), with details (including a `reason`) for the auth log. */
+function classifyPlatformTokenFailure(error: unknown): { kind: "rejected" | "unavailable"; details: { reason: string } & Record<string, unknown> } {
   if (!axios.isAxiosError(error) || !error.response) {
     return { kind: "unavailable", details: { reason: "no_response", error: safeErrorMessage(error) } };
   }
   const { status, data } = error.response;
   const description = typeof data?.error_description === "string" ? data.error_description : undefined;
-  const rejection = status === 400 && data?.error === "invalid_grant" && description !== undefined
-    ? PLATFORM_REFRESH_REJECTIONS.get(description)
-    : undefined;
-  if (rejection) {
-    return { kind: "rejected", details: { reason: rejection } };
+  const rejected = status === 400 && data?.error === "invalid_grant" && description !== PLATFORM_CLIENT_ID_MISMATCH;
+  const label = rejected && description !== undefined ? PLATFORM_INVALID_GRANT_REASONS.get(description) : undefined;
+  if (label) {
+    return { kind: "rejected", details: { reason: label } };
   }
-  const details: { reason: string } & Record<string, unknown> = { reason: status === 429 ? "rate_limited" : "http_error", status };
+  const details: { reason: string } & Record<string, unknown> = rejected
+    ? { reason: "invalid_grant" }
+    : { reason: status === 429 ? "rate_limited" : "http_error", status };
   if (description !== undefined) {
     details.platformError = description.slice(0, 100);
   }
-  return { kind: "unavailable", details };
+  return { kind: rejected ? "rejected" : "unavailable", details };
 }
 
 /**
@@ -392,7 +399,13 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
       platformRefreshToken = response.data.refresh_token;
       platformExpiresIn = response.data.expires_in;
     } catch (error) {
-      logAuthEvent("platform_token_exchange_failed", client.client_id, { error: safeErrorMessage(error) });
+      const failure = classifyPlatformTokenFailure(error);
+      logAuthEvent("platform_token_exchange_failed", client.client_id, { outcome: failure.kind, ...failure.details });
+      if (failure.kind === "rejected") {
+        // The platform code is used up or was never valid, so a retry cannot succeed: the client must sign in again.
+        await this.store.deleteSession(authorizationCode);
+        throw new InvalidGrantError("Authorization code is no longer valid");
+      }
       throw new Error("Failed to exchange authorization code with platform");
     }
 
@@ -775,7 +788,7 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
         expiresIn: typeof data.expires_in === "number" ? data.expires_in : undefined,
       };
     } catch (error) {
-      const failure = classifyRenewalFailure(error);
+      const failure = classifyPlatformTokenFailure(error);
       logAuthEvent("platform_token_refresh_failed", clientId, { path, outcome: failure.kind, ...failure.details });
       return failure.kind === "rejected" ? { kind: "rejected", reason: failure.details.reason } : { kind: "unavailable" };
     }
@@ -783,12 +796,12 @@ export class ElnoraOAuthProvider implements OAuthServerProvider {
 
   /**
    * After the platform rejected `presented`, the grant's record as renewed by a concurrent request that used
-   * the same single-use token, if there is one. "Already used" is waited out briefly, because the request
-   * that used it may not have stored its result yet.
+   * the same single-use token, if there is one. "Already used", or a refusal with no known reason, is waited out
+   * briefly, because the request that used it may not have stored its result yet.
    */
   private async renewedConcurrently(accessToken: string, presented: string, reason: string): Promise<TokenRecord | undefined> {
     let current = await this.store.getTokenRecord(accessToken);
-    if (current?.platformRefreshToken === presented && reason === "revoked") {
+    if (current?.platformRefreshToken === presented && (reason === "revoked" || reason === "invalid_grant")) {
       await new Promise((resolve) => setTimeout(resolve, CONCURRENT_RENEWAL_GRACE_MS));
       current = await this.store.getTokenRecord(accessToken);
     }

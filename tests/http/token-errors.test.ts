@@ -170,6 +170,18 @@ describe("POST /token — refresh_token grant errors", () => {
     expect({ status: retry.status, error: retry.body.error }).toEqual({ status: 400, error: "invalid_grant" });
   });
 
+  it("rejects a refresh the platform refuses without a known reason with 400 invalid_grant, and the grant stays dead", async () => {
+    const refreshToken = await seedRefreshToken();
+    platformPost.mockRejectedValueOnce(rejectedRefresh("This grant cannot be used."));
+
+    const first = await postToken({ grant_type: "refresh_token", refresh_token: refreshToken });
+    expect({ status: first.status, error: first.body.error }).toEqual({ status: 400, error: "invalid_grant" });
+    expect(first.body.error_description).not.toContain("cannot be used");
+
+    const retry = await postToken({ grant_type: "refresh_token", refresh_token: refreshToken });
+    expect({ status: retry.status, error: retry.body.error }).toEqual({ status: 400, error: "invalid_grant" });
+  });
+
   it("rejects scope escalation on refresh with 400 invalid_scope, without echoing the requested scopes", async () => {
     const refreshToken = await seedRefreshToken();
     const { status, body } = await postToken({ grant_type: "refresh_token", refresh_token: refreshToken, scope: "tasks:read orgs:write" });
@@ -209,6 +221,22 @@ describe("POST /token — refresh_token grant errors", () => {
   it("keeps the grant when the platform refuses this server's own credentials (HTTP 401): a retryable 500", async () => {
     const refreshToken = await seedRefreshToken();
     platformPost.mockRejectedValueOnce(httpError(401));
+
+    const refused = await postToken({ grant_type: "refresh_token", refresh_token: refreshToken });
+    expect({ status: refused.status, error: refused.body.error }).toEqual({ status: 500, error: "server_error" });
+
+    platformPost.mockResolvedValueOnce(platformRenewal);
+    const retry = await postToken({ grant_type: "refresh_token", refresh_token: refreshToken });
+    expect(retry.status).toBe(200);
+  });
+
+  it.each([
+    ["refuses this server's client credentials", httpError(401, { error: "invalid_client", error_description: "Invalid client_secret." })],
+    ["reports a fault of its own", httpError(500, { error: "server_error", error_description: "The token request could not be completed." })],
+    ["reports a client id that does not match", rejectedRefresh("Client ID mismatch.")],
+  ])("keeps the grant when the platform %s: a retryable 500", async (_case, error) => {
+    const refreshToken = await seedRefreshToken();
+    platformPost.mockRejectedValueOnce(error);
 
     const refused = await postToken({ grant_type: "refresh_token", refresh_token: refreshToken });
     expect({ status: refused.status, error: refused.body.error }).toEqual({ status: 500, error: "server_error" });
@@ -258,6 +286,32 @@ describe("POST /token — authorization_code grant errors", () => {
     platformPost.mockRejectedValueOnce(networkError());
     const { status, body } = await postToken({ grant_type: "authorization_code", code, code_verifier: CODE_VERIFIER, redirect_uri: REDIRECT });
     expect({ status, error: body.error }).toEqual({ status: 500, error: "server_error" });
+  });
+
+  it("rejects a code the platform no longer accepts with 400 invalid_grant, and the code stays dead without asking the platform again", async () => {
+    const code = await seedAuthCode({ platformCode: "platform-code" });
+    platformPost.mockRejectedValueOnce(httpError(400, { error: "invalid_grant", error_description: "Authorization code has already been used." }));
+
+    const first = await postToken({ grant_type: "authorization_code", code, code_verifier: CODE_VERIFIER, redirect_uri: REDIRECT });
+    expect({ status: first.status, error: first.body.error }).toEqual({ status: 400, error: "invalid_grant" });
+    expect(first.body.error_description).not.toContain("already");
+
+    const retry = await postToken({ grant_type: "authorization_code", code, code_verifier: CODE_VERIFIER, redirect_uri: REDIRECT });
+    expect({ status: retry.status, error: retry.body.error }).toEqual({ status: 400, error: "invalid_grant" });
+    expect(platformPost).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the code when the platform refuses this server's client credentials: a retryable 500", async () => {
+    const code = await seedAuthCode({ platformCode: "platform-code" });
+    platformPost.mockRejectedValueOnce(httpError(401, { error: "invalid_client", error_description: "Invalid client_secret." }));
+
+    const refused = await postToken({ grant_type: "authorization_code", code, code_verifier: CODE_VERIFIER, redirect_uri: REDIRECT });
+    expect({ status: refused.status, error: refused.body.error }).toEqual({ status: 500, error: "server_error" });
+
+    platformPost.mockResolvedValueOnce({ data: { access_token: "platform-token", refresh_token: "platform-refresh-token", expires_in: 3600 } });
+    const retry = await postToken({ grant_type: "authorization_code", code, code_verifier: CODE_VERIFIER, redirect_uri: REDIRECT });
+    expect(retry.status).toBe(200);
+    expect(retry.body.access_token).toEqual(expect.any(String));
   });
 
   it("rejects a code whose platform login never completed with 400 invalid_grant", async () => {
