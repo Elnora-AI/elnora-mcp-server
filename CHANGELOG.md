@@ -5,6 +5,14 @@ All notable changes to the Elnora MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.8.6](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v1.8.5...mcp-server-v1.8.6) (2026-10-30)
+
+
+### Bug Fixes
+
+* **auth:** end the session when the user no longer has access to the organization ([#410](https://github.com/Elnora-AI/elnora-mcp-server/issues/410)) ([24154b7](https://github.com/Elnora-AI/elnora-mcp-server/commit/24154b73fc9b965b1ec711f4fd1e50ef0713b6f8))
+* **deps:** bump @hono/node-server from 2.0.12 to 2.1.5 ([#413](https://github.com/Elnora-AI/elnora-mcp-server/issues/413)) ([0e7cfe9](https://github.com/Elnora-AI/elnora-mcp-server/commit/0e7cfe9ce4f860d626679bdd7d6348f263ede557))
+
 ## [1.8.5](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v1.8.4...mcp-server-v1.8.5) (2026-10-29)
 
 
