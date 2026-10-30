@@ -68,14 +68,16 @@ type PlatformRenewal =
 const CONCURRENT_RENEWAL_GRACE_MS = 1000;
 
 /**
- * The platform answers that mean the platform refresh token itself is no longer accepted. Only these end
- * a grant: every other failure, including other invalid_grant answers, may come from a fault on the
- * platform or in this server's configuration, and must not sign the user out.
+ * The platform answers that mean the platform refresh token is no longer accepted, either because the token itself is
+ * dead or because its user no longer has access to the organization it was issued for. Only these end a grant: every
+ * other failure, including other invalid_grant answers, may come from a fault on the platform or in this server's
+ * configuration, and must not sign the user out.
  */
 const PLATFORM_REFRESH_REJECTIONS = new Map([
   ["Invalid refresh token.", "unknown_token"],
   ["Refresh token has been revoked.", "revoked"],
   ["Refresh token has expired.", "expired"],
+  ["Access to this organization has ended.", "access_ended"],
 ]);
 
 /** Classify a failed platform refresh call, with details (including a `reason`) for the auth log. */
