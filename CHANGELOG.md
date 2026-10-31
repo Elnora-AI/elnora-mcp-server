@@ -5,6 +5,13 @@ All notable changes to the Elnora MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.8.7](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v1.8.6...mcp-server-v1.8.7) (2026-10-31)
+
+
+### Bug Fixes
+
+* **auth:** end the session on any refused grant, and on a refused sign-in code ([#415](https://github.com/Elnora-AI/elnora-mcp-server/issues/415)) ([74ead8d](https://github.com/Elnora-AI/elnora-mcp-server/commit/74ead8d89bbb23edf7973ab7b2e64e6b8efb8bb9))
+
 ## [1.8.6](https://github.com/Elnora-AI/elnora-mcp-server/compare/mcp-server-v1.8.5...mcp-server-v1.8.6) (2026-10-30)
 
 
