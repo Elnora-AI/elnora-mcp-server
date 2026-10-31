@@ -51,8 +51,8 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-/** Run authorize → platform callback → code exchange, as a client signing in. */
-async function signIn() {
+/** Run authorize → platform callback, as a client signing in, up to the code exchange. */
+async function startSignIn() {
   const registered = await provider.clientsStore.registerClient!({ redirect_uris: ["http://localhost:3000/callback"] });
   const client = { client_id: registered.client_id, redirect_uris: ["http://localhost:3000/callback"] };
   const redirect = vi.fn();
@@ -65,6 +65,12 @@ async function signIn() {
   const login = new URL(redirect.mock.calls[0][0]);
   const mcpCode = login.searchParams.get("mcp_code")!;
   await provider.handlePlatformCallback(mcpCode, "platform-code", login.searchParams.get("state")!, cookie.mock.calls[0][1]);
+  return { client, mcpCode };
+}
+
+/** Run authorize → platform callback → code exchange, as a client signing in. */
+async function signIn() {
+  const { client, mcpCode } = await startSignIn();
   const tokens = await provider.exchangeAuthorizationCode(client, mcpCode, undefined, "http://localhost:3000/callback");
   return { client, tokens };
 }
@@ -171,6 +177,21 @@ describe("refresh when the platform refuses the platform refresh token", () => {
     },
   );
 
+  it.each([
+    ["an unrecognised description", rejectedRefresh("This grant cannot be used.")],
+    ["a description that matches an object property", rejectedRefresh("constructor")],
+    ["a known description without the trailing period", rejectedRefresh("Invalid refresh token")],
+    ["no description", httpError(400, { error: "invalid_grant" })],
+  ])("returns invalid_grant and deletes the grant on an invalid_grant answer with %s", async (_case, error) => {
+    const { client, tokens } = await signIn();
+    platform.failNext(error);
+
+    const attempt = provider.exchangeRefreshToken(client, tokens.refresh_token!);
+    await expect(attempt).rejects.toBeInstanceOf(InvalidGrantError);
+    await expect(attempt).rejects.toThrow("Refresh token is no longer valid");
+    expect(await grantExists(tokens.access_token, tokens.refresh_token!)).toBe(false);
+  });
+
   it("returns invalid_grant once the platform has ended the session", async () => {
     const { client, tokens } = await signIn();
     platform.endSessions();
@@ -217,14 +238,11 @@ describe("refresh when the platform cannot renew right now", () => {
     ["a redirect", httpError(307)],
     ["a 400 without an OAuth error", httpError(400, { title: "Bad Request", status: 400 })],
     ["an unsupported grant type", httpError(400, { error: "unsupported_grant_type" })],
-    ["refused client credentials", rejectedRefresh("Invalid client_secret.")],
+    ["refused client credentials", httpError(401, { error: "invalid_client", error_description: "Invalid client_secret." })],
     ["a client id that does not match", rejectedRefresh("Client ID mismatch.")],
-    ["a platform fault reported as invalid_grant", rejectedRefresh("The platform could not complete the request.")],
-    ["a description that matches an object property", rejectedRefresh("constructor")],
-    ["a known description without the trailing period", rejectedRefresh("Invalid refresh token")],
+    ["a platform fault", httpError(500, { error: "server_error", error_description: "The token request could not be completed." })],
     ["a known description on a 401", httpError(401, { error: "invalid_grant", error_description: "Invalid refresh token." })],
     ["a known description with another error code", httpError(400, { error: "invalid_request", error_description: "Invalid refresh token." })],
-    ["a missing signing key reported as invalid_grant", rejectedRefresh("JWT key not configured.")],
   ])("returns a retryable server error and keeps the grant on %s", async (_case, error) => {
     const { client, tokens } = await signIn();
     platform.failNext(error);
@@ -415,6 +433,29 @@ describe("concurrent use of one grant", () => {
     await expect(otherRequest).resolves.toMatchObject({ token: tokens.access_token });
     expect(await grantExists(tokens.access_token, tokens.refresh_token!)).toBe(true);
   });
+
+  it("keeps the grant when another server instance renewed it and the platform refused the same token without a known reason", async () => {
+    const { tokens } = await signIn();
+    const otherInstance = new ElnoraOAuthProvider(config, store, new InMemoryClientsStore());
+    platform.expireAccessTokens();
+    let otherRequest: Promise<unknown> | undefined;
+    platform.intercept((proceed) => proceed()); // this instance validates
+    platform.intercept(async (proceed) => {
+      // The platform renews for this instance, but before this instance stores the result, the other
+      // instance presents the same token, is refused with an answer that has no known reason, and looks
+      // at the grant again.
+      const response = await proceed();
+      platform.intercept((p) => p()); // the other instance validates
+      platform.failNext(rejectedRefresh("This grant cannot be used."));
+      otherRequest = otherInstance.verifyAccessToken(tokens.access_token);
+      await new Promise((resolve) => setImmediate(resolve));
+      return response;
+    });
+
+    await expect(provider.verifyAccessToken(tokens.access_token)).resolves.toMatchObject({ token: tokens.access_token });
+    await expect(otherRequest).resolves.toMatchObject({ token: tokens.access_token });
+    expect(await grantExists(tokens.access_token, tokens.refresh_token!)).toBe(true);
+  });
 });
 
 describe("in-place renewal on the /mcp path", () => {
@@ -444,6 +485,26 @@ describe("in-place renewal on the /mcp path", () => {
 
     await expect(provider.verifyAccessToken(tokens.access_token)).rejects.toBeInstanceOf(InvalidTokenError);
     expect(await grantExists(tokens.access_token, tokens.refresh_token!)).toBe(false);
+  });
+
+  it("revokes the grant when the platform refuses the platform refresh token without a known reason", async () => {
+    const { tokens } = await signIn();
+    platform.expireAccessTokens();
+    platform.intercept((proceed) => proceed()); // validation answers normally
+    platform.failNext(rejectedRefresh("This grant cannot be used."));
+
+    await expect(provider.verifyAccessToken(tokens.access_token)).rejects.toBeInstanceOf(InvalidTokenError);
+    expect(await grantExists(tokens.access_token, tokens.refresh_token!)).toBe(false);
+  });
+
+  it("fails with a server error and keeps the grant when the platform reports a client id that does not match", async () => {
+    const { tokens } = await signIn();
+    platform.expireAccessTokens();
+    platform.intercept((proceed) => proceed()); // validation answers normally
+    platform.failNext(rejectedRefresh("Client ID mismatch."));
+
+    await expect(provider.verifyAccessToken(tokens.access_token)).rejects.toBeInstanceOf(ServerError);
+    expect(await grantExists(tokens.access_token, tokens.refresh_token!)).toBe(true);
   });
 
   it("fails with a server error and keeps the grant when renewal is unavailable", async () => {
@@ -542,6 +603,54 @@ describe("expired MCP access tokens", () => {
   });
 });
 
+describe("code exchange when the platform refuses the platform authorization code", () => {
+  it.each([
+    ["an unknown code", "Invalid authorization code."],
+    ["a code already used", "Authorization code has already been used."],
+    ["an expired code", "Authorization code has expired."],
+    ["a user who no longer has access to the organization", "Access to this organization has ended."],
+    ["an unrecognised description", "This code cannot be used."],
+    ["no description", undefined],
+  ])("returns invalid_grant and ends the pending sign-in on %s", async (_case, description) => {
+    const { client, mcpCode } = await startSignIn();
+    platform.failNext(httpError(400, { error: "invalid_grant", error_description: description }));
+
+    const attempt = provider.exchangeAuthorizationCode(client, mcpCode, undefined, "http://localhost:3000/callback");
+    await expect(attempt).rejects.toBeInstanceOf(InvalidGrantError);
+    await expect(attempt).rejects.toThrow("Authorization code is no longer valid");
+    expect(await store.getSession(mcpCode)).toBeUndefined();
+
+    const platformCalls = platform.calls.length;
+    await expect(provider.exchangeAuthorizationCode(client, mcpCode, undefined, "http://localhost:3000/callback")).rejects.toThrow(
+      "Invalid or expired authorization code",
+    );
+    expect(platform.calls).toHaveLength(platformCalls);
+  });
+
+  it.each([
+    ["a connection failure", networkError()],
+    ["a timeout", networkError("ECONNABORTED")],
+    ["rate limiting", httpError(429)],
+    ["a platform fault", httpError(500, { error: "server_error", error_description: "The token request could not be completed." })],
+    ["a server error", httpError(503)],
+    ["refused client credentials", httpError(401, { error: "invalid_client", error_description: "Invalid client_secret." })],
+    ["a malformed request", httpError(400, { error: "invalid_request" })],
+    ["a 400 without an OAuth error", httpError(400, { title: "Bad Request", status: 400 })],
+    ["a client id that does not match", httpError(400, { error: "invalid_grant", error_description: "Client ID mismatch." })],
+  ])("fails with a retryable error and keeps the pending sign-in on %s", async (_case, error) => {
+    const { client, mcpCode } = await startSignIn();
+    platform.failNext(error);
+
+    const attempt = provider.exchangeAuthorizationCode(client, mcpCode, undefined, "http://localhost:3000/callback");
+    await expect(attempt).rejects.toThrow("Failed to exchange authorization code with platform");
+    await expect(attempt).rejects.not.toBeInstanceOf(InvalidGrantError);
+    expect(await store.getSession(mcpCode)).toBeDefined();
+
+    const retried = await provider.exchangeAuthorizationCode(client, mcpCode, undefined, "http://localhost:3000/callback");
+    expect(await provider.getPlatformToken(retried.access_token)).toBe("platform-access-1");
+  });
+});
+
 describe("auth event logging", () => {
   async function authEvents(fn: () => Promise<unknown>): Promise<Array<{ event: string; details?: Record<string, unknown> }>> {
     const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
@@ -558,7 +667,9 @@ describe("auth event logging", () => {
     const events = await authEvents(async () => {
       platform.failNext(httpError(429));
       await provider.exchangeRefreshToken(client, tokens.refresh_token!).catch(() => undefined);
-      platform.failNext(rejectedRefresh("x".repeat(300)));
+      platform.failNext(httpError(400, { error: "invalid_request", error_description: "x".repeat(300) }));
+      await provider.exchangeRefreshToken(client, tokens.refresh_token!).catch(() => undefined);
+      platform.failNext(rejectedRefresh("Client ID mismatch."));
       await provider.exchangeRefreshToken(client, tokens.refresh_token!).catch(() => undefined);
       platform.failNext(rejectedRefresh("Refresh token has expired."));
       await provider.exchangeRefreshToken(client, tokens.refresh_token!).catch(() => undefined);
@@ -568,16 +679,53 @@ describe("auth event logging", () => {
       platform.failNext(rejectedRefresh("Access to this organization has ended."));
       await provider.exchangeRefreshToken(ended.client, ended.tokens.refresh_token!).catch(() => undefined);
     });
+    const unlabelled = await signIn();
+    const unlabelledEvents = await authEvents(async () => {
+      platform.failNext(rejectedRefresh("y".repeat(300)));
+      await provider.exchangeRefreshToken(unlabelled.client, unlabelled.tokens.refresh_token!).catch(() => undefined);
+    });
 
     expect(events.filter((e) => e.event.startsWith("platform_") || e.event.startsWith("refresh_platform")).map((e) => [e.event, e.details])).toEqual([
       ["platform_token_refresh_failed", { path: "refresh", outcome: "unavailable", reason: "rate_limited", status: 429 }],
       ["platform_token_refresh_failed", { path: "refresh", outcome: "unavailable", reason: "http_error", status: 400, platformError: "x".repeat(100) }],
+      ["platform_token_refresh_failed", { path: "refresh", outcome: "unavailable", reason: "http_error", status: 400, platformError: "Client ID mismatch." }],
       ["platform_token_refresh_failed", { path: "refresh", outcome: "rejected", reason: "expired" }],
       ["refresh_platform_token_revoked", { path: "refresh", reason: "expired" }],
     ]);
     expect(accessEndedEvents.filter((e) => e.event === "refresh_platform_token_revoked").map((e) => e.details)).toEqual([
       { path: "refresh", reason: "access_ended" },
     ]);
+    expect(unlabelledEvents.filter((e) => e.event.startsWith("platform_") || e.event.startsWith("refresh_platform")).map((e) => [e.event, e.details])).toEqual([
+      ["platform_token_refresh_failed", { path: "refresh", outcome: "rejected", reason: "invalid_grant", platformError: "y".repeat(100) }],
+      ["refresh_platform_token_revoked", { path: "refresh", reason: "invalid_grant" }],
+    ]);
+  });
+
+  it("records why the platform refused an authorization code, without the code or the client secret", async () => {
+    const used = await startSignIn();
+    const unlabelled = await startSignIn();
+    const unavailable = await startSignIn();
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      platform.failNext(httpError(400, { error: "invalid_grant", error_description: "Authorization code has already been used." }));
+      await provider.exchangeAuthorizationCode(used.client, used.mcpCode, undefined, "http://localhost:3000/callback").catch(() => undefined);
+      platform.failNext(httpError(400, { error: "invalid_grant", error_description: "y".repeat(300) }));
+      await provider.exchangeAuthorizationCode(unlabelled.client, unlabelled.mcpCode, undefined, "http://localhost:3000/callback").catch(() => undefined);
+      platform.failNext(httpError(503));
+      await provider.exchangeAuthorizationCode(unavailable.client, unavailable.mcpCode, undefined, "http://localhost:3000/callback").catch(() => undefined);
+
+      const lines = errorLog.mock.calls.map(([line]) => String(line));
+      expect(lines.map((line) => JSON.parse(line)).filter((e) => e.event === "platform_token_exchange_failed").map((e) => e.details)).toEqual([
+        { outcome: "rejected", reason: "code_used" },
+        { outcome: "rejected", reason: "invalid_grant", platformError: "y".repeat(100) },
+        { outcome: "unavailable", reason: "http_error", status: 503 },
+      ]);
+      for (const secret of [used.mcpCode, unlabelled.mcpCode, unavailable.mcpCode, "platform-code", config.platformClientSecret]) {
+        expect(lines.join("\n")).not.toContain(secret);
+      }
+    } finally {
+      errorLog.mockRestore();
+    }
   });
 
   it("records in-place renewals", async () => {
