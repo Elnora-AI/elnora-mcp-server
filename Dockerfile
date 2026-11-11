@@ -2,7 +2,7 @@ FROM node:26.12.1-trixie-slim AS builder
 WORKDIR /app
 RUN apt-get update && \
     apt-get upgrade -y --no-install-recommends && \
-    apt-get install -y --no-install-recommends libssl3 openssl liblzma5 libpcre2-8-0 && \
+    apt-get install -y --no-install-recommends libssl3 openssl liblzma5 libpcre2-8-0 zlib1g && \
     rm -rf /var/lib/apt/lists/*
 COPY package.json package-lock.json ./
 RUN npm ci --ignore-scripts
@@ -15,7 +15,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 RUN apt-get update && \
     apt-get upgrade -y --no-install-recommends && \
-    apt-get install -y --no-install-recommends libssl3 openssl liblzma5 libpcre2-8-0 && \
+    apt-get install -y --no-install-recommends libssl3 openssl liblzma5 libpcre2-8-0 zlib1g && \
     rm -rf /var/lib/apt/lists/*
 COPY --from=builder /app/package.json /app/package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts && \
