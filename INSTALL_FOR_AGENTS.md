@@ -67,8 +67,10 @@ There are two ways to authenticate, both first-class:
   `https://mcp.elnora.ai/.well-known/oauth-authorization-server`. Best when a
   human is at an interactive client (a browser can open).
 - **API key** via an `X-API-Key` header. Best for a **headless** agent, a
-  server, or CI where no browser is available. The key is created in the Elnora
-  dashboard and starts with `elnora_live_`.
+  server, or CI where no browser is available, and the way to manage
+  organization members, send invitations, or use API keys or the audit log,
+  depending on the user's role in the organization. The key is created in the
+  Elnora dashboard and starts with `elnora_live_`.
 
 Choose deliberately and tell the user which you picked and why:
 
@@ -189,7 +191,9 @@ Gates:
   `elnora_projects_list`, `elnora_files_upload`. The groups span protocols,
   tasks, files, projects, organizations, folders, library, search, API keys,
   audit, account, feedback, feature flags, and health (see the README's
-  capability table).
+  capability table). A sign-in (OAuth) session lists no API-key, audit or
+  feature-flag tools and fewer organization tools; that is expected (see the
+  README's Authentication section).
 - If the list is **empty** or the client reports **401 Unauthorized**, auth did
   not take. For API-key auth, re-check the header value and that the key starts
   with `elnora_live_`. For OAuth, re-run the login. Don't proceed to Step 5

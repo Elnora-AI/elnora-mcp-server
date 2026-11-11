@@ -99,6 +99,12 @@ Most MCP clients handle OAuth automatically. On first connection:
 
 No manual configuration needed.
 
+A sign-in session does not list the tools for organization details, members and invitations (including
+accepting one), organization settings, API keys, the audit log, or platform administration. To manage
+organization members, send invitations, change settings, or use API keys or the audit log from an MCP client,
+connect with an API key; what you can do depends on your role in the organization. Accept an invitation from
+its link in your browser.
+
 ### API Key
 
 Create an API key in your [Elnora dashboard](https://platform.elnora.ai) and pass it via the `X-API-Key` header:
@@ -128,7 +134,7 @@ Elnora API key on either header.
 
 ## Capabilities
 
-74 tools across 15 categories. All tools are discoverable through your MCP client's tool listing.
+The tools fall into the categories below. An API-key connection lists every tool; a sign-in session leaves out the organization, API-key, audit-log and platform-administration tools (see [Authentication](#authentication)).
 
 | Category | Tools | What you can do |
 |----------|------:|-----------------|
