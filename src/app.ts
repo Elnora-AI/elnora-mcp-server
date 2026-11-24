@@ -295,7 +295,7 @@ export function createApp(
         : new ElnoraApiClient(config, platformToken!);
 
       const getContext = () => ({ client, clientId, scopes });
-      server = createElnoraServer(getContext);
+      server = createElnoraServer(getContext, { signIn: !isApiKeyAuth });
 
       // Stateless transport — new transport per request
       transport = new StreamableHTTPServerTransport({

@@ -1,4 +1,4 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { McpServer, type RegisteredTool } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { createRequire } from "node:module";
 import type { ElnoraApiClient } from "./services/elnora-api-client.js";
 import { registerTaskTools } from "./tools/tasks.js";
@@ -16,6 +16,7 @@ import { registerAccountTools } from "./tools/account.js";
 import { registerFeedbackTools } from "./tools/feedback.js";
 import { registerFlagTools } from "./tools/flags.js";
 import { registerHealthTools } from "./tools/health.js";
+import { SIGN_IN_UNAVAILABLE_TOOLS } from "./tools/scope-guard.js";
 
 // Hoist to module scope — runs once at import time, not per-request
 const _require = createRequire(import.meta.url);
@@ -27,13 +28,23 @@ export interface RequestContext {
   scopes: string[];
 }
 
+export interface ServerOptions {
+  /** The request is from a sign-in (OAuth) session: tools it cannot use are left out of the tool list. */
+  signIn?: boolean;
+}
+
 export function createElnoraServer(
   getContext: () => RequestContext,
+  options: ServerOptions = {},
 ): McpServer {
   const server = new McpServer({
     name: "elnora-mcp-server",
     version,
   });
+
+  if (options.signIn) {
+    hideTools(server, SIGN_IN_UNAVAILABLE_TOOLS);
+  }
 
   const getClient = () => getContext().client;
 
@@ -61,4 +72,20 @@ export function createElnoraServer(
   registerHealthTools(server, getClient, getContext);
 
   return server;
+}
+
+/**
+ * Leave the named tools out of everything registered after this call. Each one is still registered, so its
+ * definition is checked, then removed before the server connects: tools/list never shows it, and calling it by
+ * name gets the SDK's "tool not found" error.
+ */
+function hideTools(server: McpServer, names: ReadonlySet<string>): void {
+  const registerTool = server.registerTool.bind(server) as (name: string, ...rest: unknown[]) => RegisteredTool;
+  server.registerTool = ((name: string, ...rest: unknown[]) => {
+    const tool = registerTool(name, ...rest);
+    if (names.has(name)) {
+      tool.remove();
+    }
+    return tool;
+  }) as typeof server.registerTool;
 }

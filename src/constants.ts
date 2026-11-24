@@ -61,7 +61,7 @@ export const SCOPE_DESCRIPTIONS: Record<string, string> = {
   "projects:read": "View your projects",
   "projects:write": "Create and modify projects, and manage members",
   "search:read": "Search your tasks and files",
-  "orgs:read": "View your organizations and their members",
+  "orgs:read": "View the organizations you belong to",
   "orgs:write": "Manage your organizations, members, and billing",
   "folders:read": "View your folders",
   "folders:write": "Create, modify, and delete your folders",

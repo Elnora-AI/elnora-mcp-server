@@ -146,6 +146,49 @@ export const TOOL_SCOPES: Record<string, string[]> = {
 };
 
 /**
+ * Tools a sign-in (OAuth) session cannot use, so its tool list leaves them out.
+ * API-key connections still list them.
+ */
+export const SIGN_IN_UNAVAILABLE_TOOLS: ReadonlySet<string> = new Set([
+  // Organization administration
+  "elnora_orgs_get",
+  "elnora_orgs_update",
+  "elnora_orgs_delete",
+  "elnora_orgs_members",
+  "elnora_orgs_updateRole",
+  "elnora_orgs_removeMember",
+  "elnora_orgs_billing",
+  "elnora_orgs_setStripe",
+  "elnora_orgs_setDefault",
+  "elnora_orgs_invite",
+  "elnora_orgs_invitations",
+  "elnora_orgs_cancelInvite",
+  "elnora_orgs_resendInvite",
+  "elnora_orgs_acceptInvite",
+  "elnora_orgs_directory",
+  "elnora_orgs_setAutotidy",
+
+  // API keys and audit log
+  "elnora_api-keys_list",
+  "elnora_api-keys_create",
+  "elnora_api-keys_revoke",
+  "elnora_api-keys_getPolicy",
+  "elnora_api-keys_setPolicy",
+  "elnora_audit_list",
+
+  // Platform administration
+  "elnora_orgs_create",
+  "elnora_orgs_listAll",
+  "elnora_account_users",
+  "elnora_account_addLegalDoc",
+  "elnora_account_updateLegalDoc",
+  "elnora_account_deleteLegalDoc",
+  "elnora_flags_list",
+  "elnora_flags_get",
+  "elnora_flags_set",
+]);
+
+/**
  * Check if the given scopes satisfy the required scopes for a tool.
  * Returns the list of missing scopes, or empty array if all present.
  */
